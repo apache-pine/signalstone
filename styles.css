@@ -1,0 +1,41 @@
+.signalstone-view { padding: 0 !important; }
+.signalstone-app { display: flex; flex-direction: column; height: 100%; min-width: 0; color: var(--text-normal); }
+.signalstone-app header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-bottom: 1px solid var(--background-modifier-border); }
+.signalstone-app h2 { margin: 0; font-size: var(--font-ui-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.signalstone-app button { cursor: pointer; }
+.signalstone-app button:focus-visible, .signalstone-app input:focus-visible, .signalstone-app textarea:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.signalstone-status, .signalstone-muted { color: var(--text-muted); }
+.signalstone-status.is-live { color: var(--color-green); }
+.signalstone-search { margin: 10px; width: calc(100% - 20px); }
+.signalstone-space-list { overflow: auto; flex: 1; }
+.signalstone-space-list > button { display: flex; flex-direction: column; align-items: flex-start; width: 100%; gap: 3px; padding: 10px 12px; border: 0; border-radius: 0; background: transparent; color: var(--text-normal); text-align: left; }
+.signalstone-space-list > button:hover { background: var(--background-modifier-hover); }
+.signalstone-space-list span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.signalstone-space-list small { color: var(--text-muted); }
+.signalstone-empty, .signalstone-empty-list { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.signalstone-empty { height: 100%; }
+.signalstone-empty-list { color: var(--text-muted); }
+.signalstone-loading { margin: 0; padding: 8px 12px; color: var(--text-muted); border-top: 1px solid var(--background-modifier-border); }
+.signalstone-conversation header { justify-content: flex-start; }
+.signalstone-messages { flex: 1; overflow: auto; padding: 8px; }
+.signalstone-load-older { display: block; margin: 4px auto 12px; }
+.signalstone-message { position: relative; padding: 8px; margin: 3px 0; border-radius: var(--radius-s); overflow-wrap: anywhere; }
+.signalstone-message:hover { background: var(--background-secondary); }
+.signalstone-message.is-own { border-left: 2px solid var(--interactive-accent); }
+.signalstone-message > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
+.signalstone-message time { color: var(--text-muted); font-size: var(--font-ui-smaller); white-space: nowrap; }
+.signalstone-message-text { margin-top: 4px; white-space: pre-wrap; line-height: 1.45; }
+.signalstone-message-text code { padding: 1px 3px; border-radius: 3px; background: var(--code-background); color: var(--code-normal); }
+.signalstone-attachment, .signalstone-file { margin-top: 6px; padding: 6px; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); }
+.signalstone-file { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
+.signalstone-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.signalstone-file small { color: var(--text-muted); }
+.signalstone-delete { opacity: 0; font-size: var(--font-ui-smaller); }
+.signalstone-message:hover .signalstone-delete, .signalstone-delete:focus { opacity: 1; }
+.signalstone-composer { padding: 8px; border-top: 1px solid var(--background-modifier-border); }
+.signalstone-composer textarea { width: 100%; min-height: 64px; resize: vertical; }
+.signalstone-composer > div:last-child { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.signalstone-attach { cursor: pointer; padding: 6px; }
+.signalstone-attach input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.signalstone-error { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px; padding: 8px; color: var(--text-error); background: var(--background-modifier-error); border-radius: var(--radius-s); }
+@media (prefers-reduced-motion: reduce) { .signalstone-app * { scroll-behavior: auto !important; transition: none !important; } }
