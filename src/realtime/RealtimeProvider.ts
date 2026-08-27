@@ -28,6 +28,8 @@ export type RealtimeStatus = 'idle' | 'connecting' | 'live' | 'reconnecting' | '
  */
 export interface RealtimeProvider {
 	readonly status: RealtimeStatus;
+	/** Safe, token-free explanation when realtime has fallen back to polling. */
+	readonly detail?: string;
 	start(): Promise<void>;
 	stop(): Promise<void>;
 	/** Tells the provider which conversation (and thread, if any) is currently open. */

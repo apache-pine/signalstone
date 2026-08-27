@@ -1,0 +1,84 @@
+import { useState } from 'react';
+import type { WebexMessage } from '../models/Message';
+import type { SignalstoneStore } from '../services/SignalstoneStore';
+import { formatDate } from '../utils/format';
+import { renderText } from '../utils/renderText';
+import { AttachmentPreview } from './AttachmentPreview';
+
+export function MessageItem({
+	message,
+	own,
+	store,
+	onDelete,
+	onReply,
+	replyCount = 0,
+	compact = false,
+}: {
+	message: WebexMessage;
+	own: boolean;
+	store: SignalstoneStore;
+	onDelete?: () => void;
+	onReply?: () => void;
+	replyCount?: number;
+	compact?: boolean;
+}) {
+	const [editing, setEditing] = useState(false);
+	const [editText, setEditText] = useState(message.markdown || message.text || '');
+	const [saving, setSaving] = useState(false);
+	const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+	const saveEdit = async () => {
+		setSaving(true);
+		try {
+			await store.editMessage(message.id, editText);
+			setEditing(false);
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	return (
+		<article className={`signalstone-message${own ? ' is-own' : ''}${compact ? ' is-compact' : ''}`}>
+			<div>
+				<strong>{own ? 'You' : message.personDisplayName || message.personEmail}</strong>
+				<time>{formatDate(message.created)}</time>
+			</div>
+			{editing ? (
+				<div className="signalstone-edit">
+					<textarea value={editText} onChange={(event) => setEditText(event.target.value)} aria-label="Edit message" />
+					<div>
+						<button onClick={() => setEditing(false)}>Cancel</button>
+						<button className="mod-cta" disabled={saving || !editText.trim()} onClick={() => void saveEdit()}>
+							{saving ? 'Saving…' : 'Save'}
+						</button>
+					</div>
+				</div>
+			) : (
+				<div className="signalstone-message-text">{renderText(message.markdown || message.text || '')}</div>
+			)}
+			{message.files?.map((url) => <AttachmentPreview url={url} store={store} key={url} />)}
+			{message.isEdited && <small>(edited)</small>}
+			{!compact && (
+				<div className={`signalstone-message-actions${replyCount > 0 ? ' has-thread' : ''}`}>
+					{onReply && <button onClick={onReply}>{replyCount > 0 ? `${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}` : 'Reply'}</button>}
+					{own && !editing && !confirmingDelete && <button onClick={() => setEditing(true)}>Edit</button>}
+					{own && onDelete && !confirmingDelete && <button onClick={() => setConfirmingDelete(true)}>Delete</button>}
+					{own && onDelete && confirmingDelete && (
+						<>
+							<button onClick={() => setConfirmingDelete(false)}>Cancel</button>
+							<button
+								className="mod-warning"
+								onClick={() => {
+									setConfirmingDelete(false);
+									onDelete();
+								}}
+							>
+								Confirm delete
+							</button>
+						</>
+					)}
+				</div>
+			)}
+		</article>
+	);
+}

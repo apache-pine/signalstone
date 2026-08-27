@@ -1,4 +1,5 @@
 import type { ActiveView, RealtimeEvent, RealtimeProvider, RealtimeStatus } from './RealtimeProvider';
+import { debugLog } from '../utils/logger';
 
 /**
  * The subset of the Webex Browser JS SDK's event surface this provider
@@ -19,13 +20,14 @@ export interface WebexSdkHandle {
 	messages: WebexSdkListenable;
 	rooms: WebexSdkListenable;
 	memberships: WebexSdkListenable;
+	/** Closes the shared Mercury WebSocket without revoking the user's token. */
+	disconnect(): Promise<void>;
 }
 
 /**
- * Creates and connects an SDK instance for the given token. Implemented in
- * `main.ts` against the real `webex` package; see
- * `docs/WEBEX_CAPABILITIES.md` for why that wiring is not enabled by
- * default in this release.
+ * Creates a messaging-only official SDK instance for the given token. The
+ * production implementation lives in `createWebexSdk.ts`; tests supply a
+ * lightweight fake through the same boundary.
  */
 export type WebexSdkFactory = (token: string) => Promise<WebexSdkHandle>;
 
@@ -58,6 +60,7 @@ export interface WebexRealtimeProviderOptions {
  */
 export class WebexRealtimeProvider implements RealtimeProvider {
 	status: RealtimeStatus = 'idle';
+	detail: string | undefined;
 
 	private handle: WebexSdkHandle | null = null;
 	private eventListeners = new Set<(event: RealtimeEvent) => void>();
@@ -75,14 +78,17 @@ export class WebexRealtimeProvider implements RealtimeProvider {
 	constructor(private readonly options: WebexRealtimeProviderOptions) {}
 
 	async start(): Promise<void> {
+		if (this.status === 'live' || this.status === 'connecting' || this.status === 'reconnecting') return;
 		this.stopped = false;
+		this.reconnectAttempts = 0;
+		this.detail = undefined;
 		await this.connect();
 	}
 
 	async stop(): Promise<void> {
 		this.stopped = true;
 		this.clearReconnectTimer();
-		this.teardown();
+		await this.teardown();
 		this.setStatus('stopped');
 	}
 
@@ -108,9 +114,14 @@ export class WebexRealtimeProvider implements RealtimeProvider {
 		}
 
 		this.setStatus(this.reconnectAttempts > 0 ? 'reconnecting' : 'connecting');
+		debugLog('sdk', 'Connecting', { attempt: this.reconnectAttempts });
 		try {
 			const handle = await this.options.createSdk(token);
-			if (this.stopped) return;
+			this.handle = handle;
+			if (this.stopped) {
+				await this.teardown();
+				return;
+			}
 
 			handle.messages.on('created', this.onMessageCreated);
 			handle.messages.on('updated', this.onMessageUpdated);
@@ -125,11 +136,13 @@ export class WebexRealtimeProvider implements RealtimeProvider {
 			await handle.rooms.listen();
 			await handle.memberships.listen();
 
-			this.handle = handle;
 			this.reconnectAttempts = 0;
 			this.setStatus('live');
-		} catch {
-			this.handle = null;
+			debugLog('sdk', 'Live: message/room/membership listeners attached');
+		} catch (error) {
+			await this.teardown();
+			this.detail = describeSdkFailure(error, token);
+			debugLog('sdk', 'Connect failed', { detail: this.detail });
 			this.setStatus('degraded');
 			this.scheduleReconnect();
 		}
@@ -155,20 +168,24 @@ export class WebexRealtimeProvider implements RealtimeProvider {
 		this.reconnectTimer = undefined;
 	}
 
-	private teardown(): void {
+	private async teardown(): Promise<void> {
 		if (!this.handle) return;
+		const handle = this.handle;
 		try {
-			this.handle.messages.off('created', this.onMessageCreated);
-			this.handle.messages.off('updated', this.onMessageUpdated);
-			this.handle.messages.off('deleted', this.onMessageDeleted);
-			this.handle.rooms.off('created', this.onRoomEvent);
-			this.handle.rooms.off('updated', this.onRoomEvent);
-			this.handle.memberships.off('created', this.onMembershipEvent);
-			this.handle.memberships.off('updated', this.onMembershipEvent);
-			this.handle.memberships.off('deleted', this.onMembershipEvent);
-			this.handle.messages.stopListening();
-			this.handle.rooms.stopListening();
-			this.handle.memberships.stopListening();
+			handle.messages.off('created', this.onMessageCreated);
+			handle.messages.off('updated', this.onMessageUpdated);
+			handle.messages.off('deleted', this.onMessageDeleted);
+			handle.rooms.off('created', this.onRoomEvent);
+			handle.rooms.off('updated', this.onRoomEvent);
+			handle.memberships.off('created', this.onMembershipEvent);
+			handle.memberships.off('updated', this.onMembershipEvent);
+			handle.memberships.off('deleted', this.onMembershipEvent);
+			handle.messages.stopListening();
+			handle.rooms.stopListening();
+			handle.memberships.stopListening();
+			await handle.disconnect();
+		} catch {
+			// Cleanup is best effort; connection failures must not prevent unload.
 		} finally {
 			this.handle = null;
 		}
@@ -176,11 +193,16 @@ export class WebexRealtimeProvider implements RealtimeProvider {
 
 	private handleMessageEvent(type: 'message-created' | 'message-updated' | 'message-deleted', payload: unknown): void {
 		const data = (payload as MessageEventPayload | undefined)?.data;
-		if (!data?.roomId || !data.id) return;
+		if (!data?.roomId || !data.id) {
+			debugLog('sdk', `Received "${type}" but payload was missing data.roomId/data.id — not forwarded`, { payloadShape: describeShape(payload) });
+			return;
+		}
+		debugLog('sdk', `Received "${type}"`, { spaceId: data.roomId, messageId: data.id });
 		this.emit({ type, spaceId: data.roomId, messageId: data.id });
 	}
 
 	private handleRoomEvent(_payload: unknown): void {
+		debugLog('sdk', 'Received a room event — refreshing space list');
 		this.emit({ type: 'refresh-space-list' });
 	}
 
@@ -197,5 +219,55 @@ export class WebexRealtimeProvider implements RealtimeProvider {
 	private setStatus(status: RealtimeStatus): void {
 		this.status = status;
 		for (const listener of this.statusListeners) listener(status);
+	}
+}
+
+/**
+ * Categorizes an SDK connection failure for the status tooltip, and always
+ * appends the actual (redacted) error text so a live tester — or a future
+ * contributor reading a bug report — has something concrete to act on
+ * instead of a bucketed guess. A bare "device registration failed" with no
+ * detail was a dead end in practice; see docs/WEBEX_CAPABILITIES.md for why
+ * this call is expected to fail with a CORS-shaped error in most desktop
+ * embeddings.
+ */
+function describeSdkFailure(error: unknown, token: string): string {
+	const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : safeStringify(error);
+	const safe = raw
+		.replaceAll(token, '[redacted]')
+		.replace(/bearer\s+\S+/gi, 'Bearer [redacted]')
+		.replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, '[redacted email]')
+		.replace(/https?:\/\/\S+/gi, '[Webex URL]')
+		.trim()
+		.slice(0, 200);
+
+	const record = typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : undefined;
+	const status = record?.statusCode ?? record?.status;
+	const lower = raw.toLowerCase();
+
+	let category: string;
+	if (status === 401) category = 'SDK authorization failed';
+	else if (status === 403) category = 'Token lacks realtime permissions';
+	else if (typeof status === 'number') category = `SDK request failed (${status})`;
+	else if (lower.includes('websocket') || lower.includes('socket')) category = 'WebSocket connection failed';
+	else if (lower.includes('device') || lower.includes('register')) category = 'Webex device registration failed';
+	else if (lower.includes('cors') || lower.includes('failed to fetch') || lower.includes('networkerror')) category = 'Blocked by cross-origin restrictions (CORS)';
+	else if (lower.includes('network') || lower.includes('fetch') || lower.includes('enotfound')) category = 'Realtime network request failed';
+	else category = 'SDK setup failed';
+
+	return safe ? `${category}: ${safe}` : category;
+}
+
+/** Describes an unknown payload's shape (top-level key names only) for debug logging, without exposing its content. */
+function describeShape(value: unknown): unknown {
+	if (value === null || value === undefined || typeof value !== 'object') return typeof value;
+	return Object.keys(value);
+}
+
+function safeStringify(value: unknown): string {
+	try {
+		return JSON.stringify(value) ?? '';
+	} catch {
+		return '';
 	}
 }
