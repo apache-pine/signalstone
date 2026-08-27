@@ -12,11 +12,4 @@ export interface Space {
 	created: string;
 	ownerId?: string;
 	description?: string;
-	/** Populated locally for direct spaces so the UI can show the other person's name. */
-	otherPerson?: {
-		id: string;
-		displayName: string;
-		email?: string;
-		avatar?: string;
-	};
 }

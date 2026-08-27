@@ -4,6 +4,9 @@ export type WebexErrorKind =
 	| 'forbidden'
 	| 'not-found'
 	| 'conflict'
+	| 'gone'
+	| 'locked'
+	| 'precondition-required'
 	| 'rate-limited'
 	| 'server-error'
 	| 'network-error'
@@ -60,6 +63,12 @@ export class WebexError extends Error {
 				return 'Webex rejected that request.';
 			case 'conflict':
 				return 'That action conflicts with the current state in Webex.';
+			case 'gone':
+				return 'Webex reports that this attachment is no longer available.';
+			case 'locked':
+				return 'Webex is still scanning this attachment. Please retry shortly.';
+			case 'precondition-required':
+				return 'Webex could not scan this attachment, so Signalstone did not download it.';
 			case 'malformed-response':
 				return 'Webex returned an unexpected response.';
 			default:
@@ -77,6 +86,9 @@ export class WebexError extends Error {
 		if (status === 403) return 'forbidden';
 		if (status === 404) return 'not-found';
 		if (status === 409) return 'conflict';
+		if (status === 410) return 'gone';
+		if (status === 423) return 'locked';
+		if (status === 428) return 'precondition-required';
 		if (status === 429) return 'rate-limited';
 		if (status >= 500) return 'server-error';
 		return 'unknown';

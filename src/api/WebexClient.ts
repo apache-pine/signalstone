@@ -202,6 +202,6 @@ export class WebexClient {
 
 	private sleep(ms: number): Promise<void> {
 		if (this.options.sleep) return this.options.sleep(ms);
-		return new Promise((resolve) => setTimeout(resolve, ms));
+		return new Promise((resolve) => window.setTimeout(resolve, ms));
 	}
 }
