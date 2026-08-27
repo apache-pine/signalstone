@@ -149,6 +149,38 @@ describe('SignalstoneStore', () => {
 		expect(messages.list).toHaveBeenCalledWith(expect.objectContaining({ spaceId: 'room', max: 200 }));
 	});
 
+	it('reorders the conversation list immediately from a realtime event, without waiting for a refresh-space-list event', async () => {
+		// Regression test: this used to only happen via a 'refresh-space-list'
+		// event, which (once the connection reaches "live") stops arriving
+		// reliably for ordinary message activity — see
+		// docs/WEBEX_CAPABILITIES.md, Realtime issue 5.
+		const { store, messages, realtime } = createStore(async () => ({
+			items: [space('Older'), { ...space('Newer'), id: 'newer-room', lastActivity: '2025-12-31T00:00:00Z' }],
+			nextUrl: undefined,
+		}));
+		await store.loadSpaces();
+		expect(store.getSnapshot().spaces.map((item) => item.id)).toEqual(['room', 'newer-room']);
+
+		messages.get.mockResolvedValueOnce(message({ id: 'bump', spaceId: 'newer-room', personId: 'them', created: '2026-01-05T00:00:00Z' }));
+		realtime.emit({ type: 'message-created', spaceId: 'newer-room', messageId: 'bump' });
+		await flushMicrotasks();
+
+		const spaces = store.getSnapshot().spaces;
+		expect(spaces.map((item) => item.id)).toEqual(['newer-room', 'room']);
+		expect(spaces.find((item) => item.id === 'newer-room')?.lastActivity).toBe('2026-01-05T00:00:00Z');
+	});
+
+	it('does not reorder a space that is not already loaded, since a full refresh handles that case instead', async () => {
+		const { store, messages, realtime } = createStore(async () => ({ items: [space('Room')], nextUrl: undefined }));
+		await store.loadSpaces();
+
+		messages.get.mockResolvedValueOnce(message({ id: 'unknown-space-message', spaceId: 'brand-new-room', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'brand-new-room', messageId: 'unknown-space-message' });
+		await flushMicrotasks();
+
+		expect(store.getSnapshot().spaces.map((item) => item.id)).toEqual(['room']);
+	});
+
 	it('exposes the initial settings on state and lets the host push updated settings live', async () => {
 		const { store } = createStore(async () => ({ items: [], nextUrl: undefined }));
 		expect(store.getSnapshot().settings).toEqual(DEFAULT_SETTINGS);

@@ -111,6 +111,7 @@ export class SignalstoneStore {
 		const outgoing = file ? { filename: file.name, contentType: file.type || 'application/octet-stream', data: await file.arrayBuffer() } : undefined;
 		const parentId = this.state.threadParentId ?? undefined;
 		const message = await this.messagesApi.create({ spaceId, parentId, text: text.trim() || undefined, markdown: text.trim() ? toWebexMarkdown(text.trim()) : undefined, file: outgoing });
+		this.bumpSpaceActivity(message.spaceId, message.created);
 		if (parentId) { this.recordThreadReplies([message]); this.patch({ threadMessages: this.normalize([...this.state.threadMessages, message]) }); }
 		else this.patch({ messages: this.normalize([...this.state.messages, message]) });
 	}
@@ -209,6 +210,12 @@ export class SignalstoneStore {
 			const message = await this.messagesApi.get(event.messageId);
 			const isOpenSpace = message.spaceId === this.state.selectedSpaceId;
 			debugLog('store', `Fetched message for realtime "${event.type}"`, { messageId: message.id, messageSpaceId: message.spaceId, eventSpaceId: event.spaceId, selectedSpaceId: this.state.selectedSpaceId, isOpenSpace, hasParent: Boolean(message.parentId) });
+			// Reorder the conversation list immediately from the message itself,
+			// rather than waiting on a 'refresh-space-list' event — Webex does not
+			// reliably push a room-updated event just because a message bumped
+			// that room's lastActivity, so this is the reliable, low-latency path
+			// (see docs/WEBEX_CAPABILITIES.md — Realtime, issue 5).
+			this.bumpSpaceActivity(message.spaceId, message.created);
 			if (!isOpenSpace) {
 				this.maybeNotify(message);
 				return;
@@ -259,6 +266,21 @@ export class SignalstoneStore {
 			if (this.state.threadParentId) { const replies = await this.messagesApi.listReplies(spaceId, this.state.threadParentId); this.recordThreadReplies(replies); this.patch({ threadMessages: this.normalize([...this.state.threadMessages, ...replies]) }); }
 			else { const page = await this.messagesApi.list({ spaceId, max: this.state.settings.messagePageSize }); this.recordThreadReplies(page.items); this.patch({ messages: this.normalize([...this.state.messages, ...page.items.filter((message) => !message.parentId)]) }); }
 		} catch { /* retain memory state offline */ }
+	}
+
+	/**
+	 * Moves a space to reflect a just-seen message's timestamp, re-sorting
+	 * `state.spaces` the same way `loadSpaces()` does. A no-op for a space not
+	 * already in the list (e.g. one just created) — that's picked up by the
+	 * next full space-list refresh instead — and for a timestamp that isn't
+	 * actually newer than what's already recorded (a stale/out-of-order event).
+	 */
+	private bumpSpaceActivity(spaceId: string, activityAt: string): void {
+		const existing = this.state.spaces.find((space) => space.id === spaceId);
+		if (!existing || Date.parse(activityAt) <= Date.parse(existing.lastActivity)) return;
+		const bumped = this.state.spaces.map((space) => (space.id === spaceId ? { ...space, lastActivity: activityAt } : space));
+		bumped.sort((a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity));
+		this.patch({ spaces: bumped });
 	}
 
 	private normalize(messages: WebexMessage[]): WebexMessage[] {

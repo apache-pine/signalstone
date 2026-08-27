@@ -91,24 +91,58 @@ describe('WebexRealtimeProvider', () => {
 });
 
 describe('ResilientRealtimeProvider', () => {
-	it('uses polling while degraded and turns it off once the SDK is live', async () => {
+	it('forwards every fallback event while the primary is not live', async () => {
 		const primary = new FakeProvider();
 		const fallback = new FakeProvider();
 		const provider = new ResilientRealtimeProvider(primary, fallback);
 		const events: RealtimeEvent[] = [];
 		provider.onEvent((event) => events.push(event));
 
-		primary.setStatus('degraded');
-		await Promise.resolve();
+		await provider.start();
 		expect(fallback.start).toHaveBeenCalledOnce();
-		fallback.emit({ type: 'refresh-space-list' });
-		expect(events).toHaveLength(1);
 
+		primary.setStatus('degraded');
+		fallback.emit({ type: 'poll-tick', view: { spaceId: 'room' } });
+		fallback.emit({ type: 'refresh-space-list' });
+		expect(events).toEqual([{ type: 'poll-tick', view: { spaceId: 'room' } }, { type: 'refresh-space-list' }]);
+	});
+
+	// Regression test: the conversation list previously went stale
+	// indefinitely once the connection reached "live", because the fallback
+	// provider that used to refresh it was stopped entirely at that point,
+	// and Webex does not reliably push a live room-updated event just because
+	// a message bumped that room's lastActivity — see
+	// docs/WEBEX_CAPABILITIES.md, Realtime issue 5.
+	it('keeps the fallback running once live, forwarding its conversation-list refresh but suppressing its now-redundant per-conversation poll', async () => {
+		const primary = new FakeProvider();
+		const fallback = new FakeProvider();
+		const provider = new ResilientRealtimeProvider(primary, fallback);
+		const events: RealtimeEvent[] = [];
+		provider.onEvent((event) => events.push(event));
+
+		await provider.start();
 		primary.setStatus('live');
 		await Promise.resolve();
-		expect(fallback.stop).toHaveBeenCalledOnce();
 		expect(provider.status).toBe('live');
+		expect(fallback.stop).not.toHaveBeenCalled();
+
+		fallback.emit({ type: 'poll-tick', view: { spaceId: 'room' } });
+		expect(events).toHaveLength(0);
+
 		fallback.emit({ type: 'refresh-space-list' });
-		expect(events).toHaveLength(1);
+		expect(events).toEqual([{ type: 'refresh-space-list' }]);
+	});
+
+	it('stops both the primary and the fallback on stop()', async () => {
+		const primary = new FakeProvider();
+		const fallback = new FakeProvider();
+		const provider = new ResilientRealtimeProvider(primary, fallback);
+
+		await provider.start();
+		await provider.stop();
+
+		expect(primary.stop).toHaveBeenCalledOnce();
+		expect(fallback.stop).toHaveBeenCalledOnce();
+		expect(provider.status).toBe('stopped');
 	});
 });
