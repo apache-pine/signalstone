@@ -10,10 +10,11 @@ Signalstone is an independent, lightweight Webex messaging client for an Obsidia
 - Recent direct/group spaces, filtering, and paginated history
 - Plain text/Webex Markdown sending and one-file upload with paste/drag-and-drop
 - Safe text/link/code rendering without injecting Webex HTML
-- Delete-own-message and conservative polling for incoming activity
+- Threaded replies, editing/deleting own messages, and inline file/image previews
+- Official Webex Browser SDK events with automatic conservative polling fallback
 - Responsive theme-native sidebar, offline states, and in-memory drafts
 
-Threads, editing, received attachment previews, new DMs, membership management, and SDK WebSocket wiring remain UI work. See [the capability record](docs/WEBEX_CAPABILITIES.md). GIPHY is intentionally excluded; ordinary GIF files upload normally.
+New direct messages are supported. Group spaces have a member panel (list, add by email, promote/demote moderator, remove). Optional notifications (off / direct messages only / all messages, configurable in settings) surface top-level messages from someone else in a space you don't currently have open — never your own messages, never the conversation you're already looking at, and no sound. Space creation and mention autocomplete remain future work. See [the capability record](docs/WEBEX_CAPABILITIES.md). GIPHY is intentionally excluded; ordinary GIF files upload and display normally.
 
 ## Install and connect
 
@@ -33,9 +34,9 @@ npm run build
 
 ## Network and privacy
 
-Signalstone connects directly to `https://webexapis.com` for identity and messaging. It stores only preferences and a Secret Storage identifier. Tokens stay in Secret Storage; history, files, drafts, and directory results are not persisted. There is no telemetry. See [PRIVACY.md](PRIVACY.md).
+Signalstone connects directly to Cisco Webex REST and realtime messaging services. It stores only preferences and a Secret Storage identifier. Tokens stay in Secret Storage; history, files, drafts, and directory results are not persisted. There is no telemetry. See [PRIVACY.md](PRIVACY.md).
 
-Personal tokens must be replaced when expired. Loaded content remains in memory while offline. This release polls the open space every 15 seconds and the list every 45 seconds.
+Personal tokens must be replaced when expired. Loaded content remains in memory while offline. Signalstone connects live through the official Webex SDK and delivers new messages immediately; if that connection is ever unavailable, degraded, or reconnecting, it automatically falls back to REST polling — the open conversation every 15 seconds, the conversation list every 45 seconds. The connectivity indicator always shows which mode is active. See "Realtime" in [docs/WEBEX_CAPABILITIES.md](docs/WEBEX_CAPABILITIES.md) for the issues that had to be fixed to get there.
 
 Signalstone is unofficial and is not endorsed, sponsored, supported, or approved by Cisco/Webex or Obsidian. Their names describe compatibility; their logos are not used.
 
