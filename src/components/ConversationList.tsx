@@ -5,7 +5,10 @@ import { formatDate, realtimeLabel } from '../utils/format';
 /** The "Recent" screen: connectivity status, local filtering, and the combined list of direct/group spaces. */
 export function ConversationList({ state, store, onNewMessage }: { state: SignalstoneState; store: SignalstoneStore; onNewMessage: () => void }) {
 	const [filter, setFilter] = useState('');
-	const spaces = state.spaces.filter((space) => (space.title || 'Direct message').toLowerCase().includes(filter.toLowerCase()));
+	const filtered = state.spaces.filter((space) => (space.title || 'Direct message').toLowerCase().includes(filter.toLowerCase()));
+	// state.spaces is already sorted by most-recent activity (see SignalstoneStore.loadSpaces);
+	// 'alphabetical' is the only case that needs re-sorting here.
+	const spaces = state.settings.spaceSortOrder === 'alphabetical' ? [...filtered].sort((a, b) => (a.title || 'Direct message').localeCompare(b.title || 'Direct message')) : filtered;
 
 	return (
 		<section className="signalstone-app">
@@ -38,7 +41,7 @@ export function ConversationList({ state, store, onNewMessage }: { state: Signal
 					<button key={space.id} onClick={() => void store.selectSpace(space.id)}>
 						<span>{space.title || (space.type === 'direct' ? 'Direct message' : 'Unnamed space')}</span>
 						<small>
-							{space.type === 'direct' ? 'Direct message' : 'Group space'} · {formatDate(space.lastActivity)}
+							{space.type === 'direct' ? 'Direct message' : 'Group space'} · {formatDate(space.lastActivity, state.settings.timeFormat)}
 						</small>
 					</button>
 				))}

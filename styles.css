@@ -35,6 +35,9 @@
 .signalstone-load-older { display: block; margin: 4px auto 12px; }
 .signalstone-message { position: relative; padding: 8px; margin: 3px 0; border-radius: var(--radius-s); overflow-wrap: anywhere; }
 .signalstone-message:hover { background: var(--background-secondary); }
+.signalstone-messages.is-compact .signalstone-message { padding: 3px 8px; margin: 0; border-radius: 0; }
+.signalstone-messages.is-compact .signalstone-message-text { margin-top: 1px; line-height: 1.3; }
+.signalstone-messages.is-compact .signalstone-message > div:first-child { gap: 6px; }
 .signalstone-message.is-own { border-left: 2px solid var(--interactive-accent); }
 .signalstone-message > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
 .signalstone-message time { color: var(--text-muted); font-size: var(--font-ui-smaller); white-space: nowrap; }

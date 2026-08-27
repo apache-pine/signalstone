@@ -13,11 +13,12 @@ interface AttachmentMetadata {
 
 /**
  * A single Webex file attachment. Starts idle (not fetched) so opening a
- * conversation never eagerly downloads every attachment; fetching is an
- * explicit click. The object URL created for preview/download is revoked on
- * unmount and whenever it is replaced.
+ * conversation never eagerly downloads every attachment unless the user has
+ * opted into `autoLoad` (the "Automatically load attachments" setting) —
+ * otherwise fetching is an explicit click. The object URL created for
+ * preview/download is revoked on unmount and whenever it is replaced.
  */
-export function AttachmentPreview({ url, store }: { url: string; store: SignalstoneStore }) {
+export function AttachmentPreview({ url, store, autoLoad = false }: { url: string; store: SignalstoneStore; autoLoad?: boolean }) {
 	const [status, setStatus] = useState<AttachmentStatus>('idle');
 	const [error, setError] = useState('Unable to retrieve attachment.');
 	const [objectUrl, setObjectUrl] = useState<string>();
@@ -46,6 +47,13 @@ export function AttachmentPreview({ url, store }: { url: string; store: Signalst
 			setStatus('error');
 		}
 	};
+
+	useEffect(() => {
+		// Fires once on mount only: an explicit opt-in kicks off exactly one
+		// automatic load attempt. A failed auto-load still lands on the normal
+		// error state with its own Retry button, rather than retrying itself.
+		if (autoLoad) void load();
+	}, []);
 
 	if (status === 'idle') {
 		return (

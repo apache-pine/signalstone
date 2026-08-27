@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { WebexMessage } from '../models/Message';
 import type { Space } from '../models/Space';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
+import type { TimeFormat } from '../settings/settings';
 import { formatDate, resolveSenderName } from '../utils/format';
 import { renderWebexMarkdown } from '../utils/webexMarkdown';
 import { AttachmentPreview } from './AttachmentPreview';
@@ -15,6 +16,9 @@ export function MessageItem({
 	onReply,
 	replyCount = 0,
 	compact = false,
+	confirmBeforeDelete = true,
+	autoLoadAttachments = false,
+	timeFormat = 'system',
 }: {
 	message: WebexMessage;
 	own: boolean;
@@ -25,6 +29,11 @@ export function MessageItem({
 	onReply?: () => void;
 	replyCount?: number;
 	compact?: boolean;
+	/** Whether Delete requires a second confirming click. Defaults to true, the original behavior. */
+	confirmBeforeDelete?: boolean;
+	/** Whether attachments on this message should fetch as soon as it renders. Defaults to false, the original click-to-load behavior. */
+	autoLoadAttachments?: boolean;
+	timeFormat?: TimeFormat;
 }) {
 	const [editing, setEditing] = useState(false);
 	const [editText, setEditText] = useState(message.markdown || message.text || '');
@@ -45,7 +54,7 @@ export function MessageItem({
 		<article className={`signalstone-message${own ? ' is-own' : ''}${compact ? ' is-compact' : ''}`}>
 			<div>
 				<strong>{own ? 'You' : resolveSenderName(message, space)}</strong>
-				<time>{formatDate(message.created)}</time>
+				<time>{formatDate(message.created, timeFormat)}</time>
 			</div>
 			{editing ? (
 				<div className="signalstone-edit">
@@ -60,13 +69,22 @@ export function MessageItem({
 			) : (
 				<div className="signalstone-message-text">{renderWebexMarkdown(message.markdown || message.text || '')}</div>
 			)}
-			{message.files?.map((url) => <AttachmentPreview url={url} store={store} key={url} />)}
+			{message.files?.map((url) => <AttachmentPreview url={url} store={store} autoLoad={autoLoadAttachments} key={url} />)}
 			{message.isEdited && <small>(edited)</small>}
 			{!compact && (
 				<div className={`signalstone-message-actions${replyCount > 0 ? ' has-thread' : ''}`}>
 					{onReply && <button onClick={onReply}>{replyCount > 0 ? `${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}` : 'Reply'}</button>}
 					{own && !editing && !confirmingDelete && <button onClick={() => setEditing(true)}>Edit</button>}
-					{own && onDelete && !confirmingDelete && <button onClick={() => setConfirmingDelete(true)}>Delete</button>}
+					{own && onDelete && !confirmingDelete && (
+						<button
+							onClick={() => {
+								if (confirmBeforeDelete) setConfirmingDelete(true);
+								else onDelete();
+							}}
+						>
+							Delete
+						</button>
+					)}
 					{own && onDelete && confirmingDelete && (
 						<>
 							<button onClick={() => setConfirmingDelete(false)}>Cancel</button>

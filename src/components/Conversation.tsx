@@ -65,6 +65,7 @@ export function Conversation({
 				spaceType={spaceType}
 				selfId={selfId}
 				store={store}
+				sendKeybind={state.settings.sendKeybind}
 			/>
 		</section>
 	);
