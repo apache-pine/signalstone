@@ -11,6 +11,7 @@ export function ConversationHeader({
 	onRename,
 	avatarUrl,
 	presence,
+	startEditing,
 }: {
 	title: string;
 	isThread: boolean;
@@ -21,8 +22,10 @@ export function ConversationHeader({
 	onRename?: (title: string) => void;
 	avatarUrl?: string;
 	presence?: { category: PresenceCategory; label: string };
+	/** Opens straight into rename editing — set when arriving here via the conversation list's "Rename…" context-menu item. Only consulted on first mount, like any useState initial value. */
+	startEditing?: boolean;
 }) {
-	const [editing, setEditing] = useState(false);
+	const [editing, setEditing] = useState(startEditing ?? false);
 	const [draft, setDraft] = useState(title);
 
 	const save = () => {

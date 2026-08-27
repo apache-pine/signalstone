@@ -2,14 +2,34 @@ import { useState } from 'react';
 import type { SignalstoneState, SignalstoneStore } from '../services/SignalstoneStore';
 import { formatDate, realtimeLabel } from '../utils/format';
 import { presenceInfo } from '../utils/presence';
+import { openSpaceContextMenu } from './spaceContextMenu';
 
 /** The "Recent" screen: connectivity status, local filtering, and the combined list of direct/group spaces. */
-export function ConversationList({ state, store, onNewMessage, onNewSpace }: { state: SignalstoneState; store: SignalstoneStore; onNewMessage: () => void; onNewSpace: () => void }) {
+export function ConversationList({
+	state,
+	store,
+	onNewMessage,
+	onNewSpace,
+	onOpenSpaceView,
+}: {
+	state: SignalstoneState;
+	store: SignalstoneStore;
+	onNewMessage: () => void;
+	onNewSpace: () => void;
+	/** Opens a space directly into its member panel or rename editor — used by the row context menu's "Manage members"/"Rename…" items. */
+	onOpenSpaceView: (spaceId: string, view: 'members' | 'rename') => void;
+}) {
 	const [filter, setFilter] = useState('');
+	const selfId = state.connection.status === 'connected' ? state.connection.person.id : '';
+	const isFavorite = (spaceId: string) => state.settings.favoriteSpaceIds.includes(spaceId);
 	const filtered = state.spaces.filter((space) => (space.title || 'Direct message').toLowerCase().includes(filter.toLowerCase()));
 	// state.spaces is already sorted by most-recent activity (see SignalstoneStore.loadSpaces);
 	// 'alphabetical' is the only case that needs re-sorting here.
-	const spaces = state.settings.spaceSortOrder === 'alphabetical' ? [...filtered].sort((a, b) => (a.title || 'Direct message').localeCompare(b.title || 'Direct message')) : filtered;
+	const ordered = state.settings.spaceSortOrder === 'alphabetical' ? [...filtered].sort((a, b) => (a.title || 'Direct message').localeCompare(b.title || 'Direct message')) : filtered;
+	// A stable sort (guaranteed by spec since ES2019) partitions favorites to
+	// the front without disturbing their relative order from the sort above —
+	// favorites stay in recent/alphabetical order among themselves too.
+	const spaces = [...ordered].sort((a, b) => Number(isFavorite(b.id)) - Number(isFavorite(a.id)));
 
 	return (
 		<section className="signalstone-app">
@@ -43,18 +63,34 @@ export function ConversationList({ state, store, onNewMessage, onNewSpace }: { s
 			<div className="signalstone-space-list">
 				{spaces.map((space) => {
 					const isDirect = space.type === 'direct';
+					const isHidden = Boolean(state.hiddenSpaceIds[space.id]);
+					const favorited = isFavorite(space.id);
 					const info = isDirect ? state.directoryInfoBySpaceId[space.id] : undefined;
 					const presence = isDirect && state.settings.showPresenceInRecents ? presenceInfo(info?.status) : undefined;
 					return (
-						<button key={space.id} onClick={() => void store.selectSpace(space.id)}>
+						<button
+							key={space.id}
+							className={isHidden ? 'is-hidden' : ''}
+							onClick={() => void store.selectSpace(space.id)}
+							onContextMenu={(event) => {
+								event.preventDefault();
+								openSpaceContextMenu(event.nativeEvent, space, { selfId, isHidden, isFavorite: favorited, store, onOpenView: onOpenSpaceView });
+							}}
+						>
 							{isDirect && state.settings.showAvatarsInRecents && info?.avatar && <img className="signalstone-avatar" src={info.avatar} alt="" loading="lazy" />}
 							<div>
 								<span>
+									{favorited && (
+										<span className="signalstone-favorite-star" aria-label="Favorited" title="Favorited">
+											★
+										</span>
+									)}
 									<span className="signalstone-space-title">{space.title || (space.type === 'direct' ? 'Direct message' : 'Unnamed space')}</span>
 									{presence && <span className={`signalstone-presence is-${presence.category}`} title={presence.label} aria-label={presence.label} />}
 								</span>
 								<small>
 									{space.type === 'direct' ? 'Direct message' : 'Group space'} · {formatDate(space.lastActivity, state.settings.timeFormat)}
+									{isHidden && ' · Hidden'}
 								</small>
 							</div>
 						</button>
