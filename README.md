@@ -14,7 +14,18 @@ Signalstone is an independent, lightweight Webex messaging client for an Obsidia
 - Official Webex Browser SDK events with automatic conservative polling fallback
 - Responsive theme-native sidebar, offline states, and in-memory drafts
 
-New direct messages are supported. Group spaces have a member panel (list, add by email, promote/demote moderator, remove) and `@mention` autocomplete (plus `@all`) in the composer. Incoming Markdown — bold, italic, links, lists, blockquotes, code — renders as real formatting, not raw syntax; outgoing text is sent through Webex's `markdown` field. Optional notifications (off / direct messages only / all messages, configurable in settings) surface top-level messages from someone else in a space you don't currently have open — never your own messages, never the conversation you're already looking at, and no sound. Space creation remains future work. See [the capability record](docs/WEBEX_CAPABILITIES.md). GIPHY is intentionally excluded; ordinary GIF files upload and display normally.
+New direct messages are supported. Group spaces have a member panel (list, add by email, promote/demote moderator, remove) and `@mention` autocomplete (plus `@all`) in the composer. Incoming Markdown — bold, italic, links, lists, blockquotes, code — renders as real formatting, not raw syntax; outgoing text is sent through Webex's `markdown` field. Optional notifications (off / direct messages + @mentions / direct messages only / all messages, with an optional message preview, configurable in settings) surface top-level messages from someone else in a space you don't currently have open — never your own messages, never the conversation you're already looking at, and no sound. Space creation remains future work. See [the capability record](docs/WEBEX_CAPABILITIES.md). GIPHY is intentionally excluded; ordinary GIF files upload and display normally.
+
+## Settings
+
+Every behavior below defaults to the plugin's original, unconfigured behavior — nothing changes until you deliberately change a setting. Open Settings → Signalstone:
+
+- **Connection** — token, connection status, disconnect, whether to open Signalstone automatically on startup, and which sidebar it opens in.
+- **Composing** — whether Enter or Shift+Enter sends a message (the other always inserts a newline).
+- **Notifications** — who to notify for (off / direct messages + mentions / direct messages only / all messages) and whether a notification includes a text preview.
+- **Appearance** — message spacing (comfortable/compact), 12-hour vs. 24-hour vs. system timestamps, and conversation list sort order (recent activity vs. alphabetical).
+- **Conversations** — whether deleting a message requires a confirming second click, whether attachments load automatically instead of on click, and whether the message list always scrolls to a new message or only when you were already near the bottom.
+- **Advanced** — the REST-polling fallback's cadence (only relevant while the connectivity indicator shows "Polling" rather than "Live"), how many messages load per page, and debug logging.
 
 ## Install and connect
 
