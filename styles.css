@@ -19,6 +19,10 @@
 .signalstone-loading { margin: 0; padding: 8px 12px; color: var(--text-muted); border-top: 1px solid var(--background-modifier-border); }
 .signalstone-conversation header { justify-content: flex-start; }
 .signalstone-conversation header .signalstone-header-action { margin-left: auto; }
+.signalstone-conversation header .signalstone-header-action + .signalstone-header-action { margin-left: 4px; }
+.signalstone-rename { display: flex; flex: 1; align-items: center; gap: 4px; min-width: 0; }
+.signalstone-rename input { flex: 1; min-width: 0; }
+.signalstone-leave-space { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--background-modifier-border); }
 .signalstone-members-body { display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow: auto; }
 .signalstone-add-member { display: flex; gap: 6px; }
 .signalstone-add-member input { flex: 1; min-width: 0; }

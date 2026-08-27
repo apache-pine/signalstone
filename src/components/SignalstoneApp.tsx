@@ -5,6 +5,7 @@ import { ConnectionScreen } from './ConnectionScreen';
 import { ConversationList } from './ConversationList';
 import { Conversation } from './Conversation';
 import { NewMessage } from './NewMessage';
+import { NewSpace } from './NewSpace';
 
 export function SignalstoneApp({ store, openSettings }: { store: SignalstoneStore; openSettings: () => void }) {
 	return (
@@ -18,6 +19,7 @@ export function SignalstoneApp({ store, openSettings }: { store: SignalstoneStor
 function SignalstoneRouter({ store, openSettings }: { store: SignalstoneStore; openSettings: () => void }) {
 	const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
 	const [startingNewMessage, setStartingNewMessage] = useState(false);
+	const [startingNewSpace, setStartingNewSpace] = useState(false);
 
 	useEffect(() => {
 		if (state.connection.status === 'connected' && state.spaces.length === 0) void store.loadSpaces();
@@ -36,5 +38,9 @@ function SignalstoneRouter({ store, openSettings }: { store: SignalstoneStore; o
 		return <NewMessage store={store} onClose={() => setStartingNewMessage(false)} />;
 	}
 
-	return <ConversationList state={state} store={store} onNewMessage={() => setStartingNewMessage(true)} />;
+	if (startingNewSpace) {
+		return <NewSpace store={store} onClose={() => setStartingNewSpace(false)} />;
+	}
+
+	return <ConversationList state={state} store={store} onNewMessage={() => setStartingNewMessage(true)} onNewSpace={() => setStartingNewSpace(true)} />;
 }
