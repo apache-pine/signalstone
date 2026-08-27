@@ -13,6 +13,13 @@ export type RealtimeEvent =
 	| { type: 'message-updated'; spaceId: string; messageId: string }
 	| { type: 'message-deleted'; spaceId: string; messageId: string }
 	| { type: 'memberships-changed'; spaceId: string }
+	/**
+	 * Someone (never the current user, whose own reads Signalstone has no way
+	 * to send — see docs/WEBEX_CAPABILITIES.md, "Read/unread state") read up to
+	 * a given message. Only ever emitted by the live SDK provider — REST
+	 * polling has no equivalent public read-status endpoint to fall back to.
+	 */
+	| { type: 'membership-seen'; spaceId: string; personId: string; personDisplayName?: string; personEmail?: string; lastSeenMessageId: string; seenAt: string }
 	| { type: 'poll-tick'; view: ActiveView }
 	| { type: 'refresh-space-list' };
 

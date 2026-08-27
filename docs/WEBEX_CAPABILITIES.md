@@ -12,7 +12,7 @@
 | Membership management | [Memberships API](https://developer.webex.com/docs/api/v1/memberships) | List, add by email, moderator toggle, and remove implemented for group spaces; space creation/rename UI still pending |
 | Realtime | [Browser SDK](https://developer.webex.com/messaging/docs/sdks/browser) | Confirmed reaching `Live`; five issues found and fixed along the way (a crash, a CORS block, a room-id encoding mismatch, a missing plugin that silently broke every event envelope, and a conversation list that went stale once live) — see below |
 | Notifications | Obsidian `Notice` API | Off / direct messages + @mentions / direct messages only / all messages, for top-level messages from someone else in a space that isn't open; optional message preview; no sound. Mention detection uses the Message resource's own documented `mentionedPeople`/`mentionedGroups` fields (https://developer.webex.com/docs/api/v1/messages), not markdown parsing |
-| Read state | SDK membership last-seen behavior exists | Not wired; no canonical-unread claim |
+| Read state | `memberships.on('seen', ...)` — public, live-wired; establishing/sending your own is private-only — see below | Receive-only, live-only: shows "Seen by …" on a message once a live receipt points at it |
 | Emoji reactions | Private/internal only — see below | Intentionally not implemented |
 | Adaptive cards | Public APIs exist | Safe fallback only |
 | GIPHY | Intentionally excluded | Not implemented |
@@ -64,6 +64,71 @@ tag's attributes (`data-object-type`, `data-object-id`) are skipped over,
 never read as anything meaningful, and the raw tag is never treated as
 HTML. Covered by a regression test in `test/webex-markdown.test.tsx` using
 the exact tag observed live.
+
+## Read/unread state: receive-only, live-only — sending is private-only
+
+Investigated directly against the installed SDK source, the same way as
+emoji reactions below — this isn't a documentation gap, it's a real answer
+about what the public API can and can't do, and it splits cleanly down the
+middle: receiving someone else's read receipt is public; establishing or
+sending your own is not.
+
+The public, documented Rooms and Memberships REST resources
+(`GET /rooms`, `GET /memberships`) carry no unread/last-seen field at all —
+`Room` has `lastActivity` (when the space last had activity) but nothing
+about *this user's* read position in it; `Membership` has no equivalent
+either. Both `@webex/plugin-rooms` and `@webex/plugin-memberships` — the same
+public plugins Signalstone already depends on for everything else — do have
+extra methods that look like exactly what's needed:
+
+- `rooms.listWithReadStatus()` / `rooms.getWithReadStatus()` — "For rooms
+  where `lastActivityDate > lastSeenDate` the space can be considered to be
+  'unread'" (`plugin-rooms/src/rooms.js`, JSDoc directly above each method).
+- `memberships.listWithReadStatus()` — returns each member's `lastSeenId`/
+  `lastSeenDate` (`plugin-memberships/src/memberships.js`).
+- `memberships.updateLastSeen(message)` — the way a client would mark a
+  message as read, described in its own JSDoc as sending a "read receipt".
+
+All three call `this.webex.internal.conversation` directly — `.list()`,
+`.get()`, and `.acknowledge()` respectively — not `service: 'hydra'`, the
+public REST layer every other method in these same two files uses
+(`rooms.list()`, `memberships.create()/update()/remove()`, etc. all pass
+`service: 'hydra'`; these three don't). `webex.internal.conversation` is the
+same private conversation service already ruled out for emoji reactions, for
+the same reason: not `webexapis.com`, not a documented integration surface.
+Establishing your own baseline read position on load (`listWithReadStatus`)
+and sending your own read receipt (`updateLastSeen`) both require it — there
+is no public way to do either, and that split is not expected to close
+without Cisco documenting a public endpoint.
+
+**What is public and implemented:** `memberships.on('seen', ...)` is a
+documented event on the same public `.listen()/.on()` contract Signalstone
+already uses for messages/rooms/memberships, confirmed dispatched end-to-end
+from a real Mercury `acknowledge` activity (`memberships.js`'s
+`onWebexApiEvent`, case `ACTIVITY_VERB.ACKNOWLEDGE` →
+`trigger(EVENT_TYPE.SEEN, ...)`) — it reports when *someone else* (never the
+current user, since Signalstone has no public way to generate its own)
+has read up to a given message. `WebexRealtimeProvider` translates it into a
+`membership-seen` realtime event; `SignalstoneStore` records it in
+`readReceiptsBySpace` (keyed by space, then by person, replacing an older
+receipt only with a newer one — an out-of-order event is dropped); a message
+shows a "Seen by …" line once a receipt's `lastSeenMessageId` matches it.
+
+Two real limitations, both direct consequences of being receive-only with no
+baseline fetch, not implementation gaps: it only ever shows a receipt for a
+message currently loaded in the visible list (a receipt pointing at an older,
+not-yet-loaded message just doesn't render anywhere yet — not wrong, just
+invisible until that message loads too), and it starts from nothing on every
+launch — there is no "who had already read what" to restore, only what's
+observed live from that point forward, consistent with Signalstone persisting
+no message history generally.
+
+Sending your own read receipt remains not implemented, and not planned unless
+Cisco documents a public endpoint for it — same standing as emoji reactions.
+Covered by tests in `test/realtime.test.ts` (the SDK event translation, and a
+malformed payload correctly dropped) and `test/store.test.ts`
+(`recordReadReceipt`: recording, ignoring the current user's own, and
+ignoring an out-of-order older event).
 
 ## Emoji reactions: confirmed private-only, not implemented
 

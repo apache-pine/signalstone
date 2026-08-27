@@ -181,6 +181,36 @@ describe('SignalstoneStore', () => {
 		expect(store.getSnapshot().spaces.map((item) => item.id)).toEqual(['room']);
 	});
 
+	it('records a read receipt from a live membership-seen event, keyed by space then by person', async () => {
+		const { store, realtime } = createStore(async () => ({ items: [], nextUrl: undefined }));
+		realtime.emit({ type: 'membership-seen', spaceId: 'room', personId: 'them', personDisplayName: 'Anthony Perez', personEmail: 'anthony@example.com', lastSeenMessageId: 'message-1', seenAt: '2026-01-01T00:00:00Z' });
+
+		expect(store.getSnapshot().readReceiptsBySpace.room?.them).toEqual({
+			personId: 'them',
+			personDisplayName: 'Anthony Perez',
+			personEmail: 'anthony@example.com',
+			lastSeenMessageId: 'message-1',
+			seenAt: '2026-01-01T00:00:00Z',
+		});
+	});
+
+	it('ignores the current user\'s own read receipt, since Signalstone never sends one itself', async () => {
+		const { store, realtime } = createStore(async () => ({ items: [], nextUrl: undefined }));
+		realtime.emit({ type: 'membership-seen', spaceId: 'room', personId: 'me', personEmail: 'me@example.com', lastSeenMessageId: 'message-1', seenAt: '2026-01-01T00:00:00Z' });
+
+		expect(store.getSnapshot().readReceiptsBySpace.room).toBeUndefined();
+	});
+
+	it('replaces a stale receipt with a newer one, but ignores an out-of-order older one', async () => {
+		const { store, realtime } = createStore(async () => ({ items: [], nextUrl: undefined }));
+		realtime.emit({ type: 'membership-seen', spaceId: 'room', personId: 'them', personEmail: 'them@example.com', lastSeenMessageId: 'message-1', seenAt: '2026-01-01T00:00:00Z' });
+		realtime.emit({ type: 'membership-seen', spaceId: 'room', personId: 'them', personEmail: 'them@example.com', lastSeenMessageId: 'message-2', seenAt: '2026-01-02T00:00:00Z' });
+		expect(store.getSnapshot().readReceiptsBySpace.room?.them?.lastSeenMessageId).toBe('message-2');
+
+		realtime.emit({ type: 'membership-seen', spaceId: 'room', personId: 'them', personEmail: 'them@example.com', lastSeenMessageId: 'stale-message', seenAt: '2025-12-31T00:00:00Z' });
+		expect(store.getSnapshot().readReceiptsBySpace.room?.them?.lastSeenMessageId).toBe('message-2');
+	});
+
 	it('exposes the initial settings on state and lets the host push updated settings live', async () => {
 		const { store } = createStore(async () => ({ items: [], nextUrl: undefined }));
 		expect(store.getSnapshot().settings).toEqual(DEFAULT_SETTINGS);

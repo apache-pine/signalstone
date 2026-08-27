@@ -3,3 +3,4 @@ export * from './Space';
 export * from './Membership';
 export * from './Message';
 export * from './Attachment';
+export * from './ReadReceipt';

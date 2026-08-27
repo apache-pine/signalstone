@@ -39,6 +39,10 @@ interface MembershipEventPayload {
 	data?: { roomId?: string };
 }
 
+interface MembershipSeenEventPayload {
+	data?: { roomId?: string; personId?: string; personDisplayName?: string; personEmail?: string; lastSeenId?: string; created?: string };
+}
+
 export interface WebexRealtimeProviderOptions {
 	getToken: () => string | null;
 	createSdk: WebexSdkFactory;
@@ -74,6 +78,7 @@ export class WebexRealtimeProvider implements RealtimeProvider {
 	private readonly onMessageDeleted = (payload: unknown) => this.handleMessageEvent('message-deleted', payload);
 	private readonly onRoomEvent = (payload: unknown) => this.handleRoomEvent(payload);
 	private readonly onMembershipEvent = (payload: unknown) => this.handleMembershipEvent(payload);
+	private readonly onMembershipSeen = (payload: unknown) => this.handleMembershipSeenEvent(payload);
 
 	constructor(private readonly options: WebexRealtimeProviderOptions) {}
 
@@ -131,6 +136,11 @@ export class WebexRealtimeProvider implements RealtimeProvider {
 			handle.memberships.on('created', this.onMembershipEvent);
 			handle.memberships.on('updated', this.onMembershipEvent);
 			handle.memberships.on('deleted', this.onMembershipEvent);
+			// 'seen' is a documented event on the same public listen()/on()
+			// contract as the above (see docs/WEBEX_CAPABILITIES.md, "Read/unread
+			// state") -- someone else's read receipt, never our own (Signalstone
+			// has no public way to send one).
+			handle.memberships.on('seen', this.onMembershipSeen);
 
 			await handle.messages.listen();
 			await handle.rooms.listen();
@@ -180,6 +190,7 @@ export class WebexRealtimeProvider implements RealtimeProvider {
 			handle.memberships.off('created', this.onMembershipEvent);
 			handle.memberships.off('updated', this.onMembershipEvent);
 			handle.memberships.off('deleted', this.onMembershipEvent);
+			handle.memberships.off('seen', this.onMembershipSeen);
 			handle.messages.stopListening();
 			handle.rooms.stopListening();
 			handle.memberships.stopListening();
@@ -210,6 +221,24 @@ export class WebexRealtimeProvider implements RealtimeProvider {
 		const spaceId = (payload as MembershipEventPayload | undefined)?.data?.roomId;
 		if (!spaceId) return;
 		this.emit({ type: 'memberships-changed', spaceId });
+	}
+
+	private handleMembershipSeenEvent(payload: unknown): void {
+		const data = (payload as MembershipSeenEventPayload | undefined)?.data;
+		if (!data?.roomId || !data.personId || !data.lastSeenId) {
+			debugLog('sdk', 'Received "seen" but payload was missing required fields — not forwarded', { payloadShape: describeShape(payload) });
+			return;
+		}
+		debugLog('sdk', 'Received "seen"', { spaceId: data.roomId, personId: data.personId, lastSeenMessageId: data.lastSeenId });
+		this.emit({
+			type: 'membership-seen',
+			spaceId: data.roomId,
+			personId: data.personId,
+			personDisplayName: data.personDisplayName,
+			personEmail: data.personEmail,
+			lastSeenMessageId: data.lastSeenId,
+			seenAt: data.created ?? new Date().toISOString(),
+		});
 	}
 
 	private emit(event: RealtimeEvent): void {

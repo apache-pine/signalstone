@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { WebexMessage } from '../models/Message';
+import type { ReadReceipt } from '../models/ReadReceipt';
 import type { Space } from '../models/Space';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
 import type { TimeFormat } from '../settings/settings';
@@ -19,6 +20,7 @@ export function MessageItem({
 	confirmBeforeDelete = true,
 	autoLoadAttachments = false,
 	timeFormat = 'system',
+	readBy,
 }: {
 	message: WebexMessage;
 	own: boolean;
@@ -34,6 +36,8 @@ export function MessageItem({
 	/** Whether attachments on this message should fetch as soon as it renders. Defaults to false, the original click-to-load behavior. */
 	autoLoadAttachments?: boolean;
 	timeFormat?: TimeFormat;
+	/** Other members whose live read receipt currently points at this exact message. See docs/WEBEX_CAPABILITIES.md, "Read/unread state" — receive-only, live-only. */
+	readBy?: ReadReceipt[];
 }) {
 	const [editing, setEditing] = useState(false);
 	const [editText, setEditText] = useState(message.markdown || message.text || '');
@@ -71,6 +75,9 @@ export function MessageItem({
 			)}
 			{message.files?.map((url) => <AttachmentPreview url={url} store={store} autoLoad={autoLoadAttachments} key={url} />)}
 			{message.isEdited && <small>(edited)</small>}
+			{readBy && readBy.length > 0 && (
+				<small className="signalstone-read-receipt">Seen by {readBy.map((reader) => reader.personDisplayName || reader.personEmail || 'someone').join(', ')}</small>
+			)}
 			{!compact && (
 				<div className={`signalstone-message-actions${replyCount > 0 ? ' has-thread' : ''}`}>
 					{onReply && <button onClick={onReply}>{replyCount > 0 ? `${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}` : 'Reply'}</button>}
