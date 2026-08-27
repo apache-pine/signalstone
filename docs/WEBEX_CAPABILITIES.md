@@ -3,13 +3,13 @@
 | Feature | Public capability | Implementation |
 |---|---|---|
 | Markdown | [Create Message](https://developer.webex.com/docs/api/v1/messages/create-a-message), [documented syntax](https://developer.webex.com/formatting-messages.html) | Outgoing: sent via the `markdown` field. Incoming: rendered as React elements (never HTML) for bold, italic, links, ordered/unordered lists with nesting, blockquotes, inline code, fenced code blocks, and mentions — see `src/utils/webexMarkdown.tsx` |
-| Spaces/direct spaces | [Rooms API](https://developer.webex.com/docs/api/v1/rooms) | List/open implemented |
+| Spaces/direct spaces | [Rooms API](https://developer.webex.com/docs/api/v1/rooms) | List/open/create/rename/leave implemented |
 | Paginated history | [List Messages](https://developer.webex.com/docs/api/v1/messages/list-messages) | Implemented |
 | File/GIF upload | Supported; one file per request | Upload and authenticated received preview/save implemented |
 | Threads | Supported via `parentId` | Reply, focused thread, and inline reply context implemented |
 | Edit/delete own message | Supported | Implemented for the authenticated user's messages |
 | Mentions | Sending: documented markup (`<@personEmail:...\|Name>`, `<@personId:...\|Name>`, `<@all>`). Rendering: `<spark-mention>` — Webex's own tag, undocumented but confirmed live, see below | Incoming: renders both forms as a styled `@Name`/`@all` span. Outgoing: type `@` in a group space's composer for autocomplete against loaded members, plus `@all`; resolves to the documented send-time markup. Not offered in direct spaces (no one else to mention) or the edit-in-place box |
-| Membership management | [Memberships API](https://developer.webex.com/docs/api/v1/memberships) | List, add by email, moderator toggle, and remove implemented for group spaces; space creation/rename UI still pending |
+| Membership management | [Memberships API](https://developer.webex.com/docs/api/v1/memberships) | List, add by email, moderator toggle, and remove implemented for group spaces |
 | Realtime | [Browser SDK](https://developer.webex.com/messaging/docs/sdks/browser) | Confirmed reaching `Live`; five issues found and fixed along the way (a crash, a CORS block, a room-id encoding mismatch, a missing plugin that silently broke every event envelope, and a conversation list that went stale once live) — see below |
 | Notifications | Obsidian `Notice` API | Off / direct messages + @mentions / direct messages only / all messages, for top-level messages from someone else in a space that isn't open; optional message preview; no sound. Mention detection uses the Message resource's own documented `mentionedPeople`/`mentionedGroups` fields (https://developer.webex.com/docs/api/v1/messages), not markdown parsing |
 | Read state | `memberships.on('seen', ...)` — public, live-wired; establishing/sending your own is private-only — see below | Receive-only, live-only: shows "Seen by …" on a message once a live receipt points at it |
@@ -64,6 +64,27 @@ tag's attributes (`data-object-type`, `data-object-id`) are skipped over,
 never read as anything meaningful, and the raw tag is never treated as
 HTML. Covered by a regression test in `test/webex-markdown.test.tsx` using
 the exact tag observed live.
+
+## Space management: create, rename, leave
+
+All three use `POST`/`PUT`/`DELETE /rooms` — the same public, documented
+Rooms REST endpoints `SpacesApi` already wrapped for `list()`/`get()`; the
+`create`/`rename`/`delete` methods existed in that file unused until now, so
+this was mostly wiring rather than new API surface.
+
+`DELETE /rooms/{id}` is Webex's single endpoint for both "delete" and
+"leave": it deletes the space if the caller is a moderator, and simply
+removes the caller's own membership otherwise. The "Leave this space" action
+is deliberately offered only for group spaces, not direct ones — deleting a
+1:1 space ends that conversation for both people, which isn't what a Leave
+button should imply for a DM. Confirmed with a two-step "Confirm leave" click
+in the member panel, the same pattern already used for removing another
+member.
+
+Creating a space adds members by email best-effort: a failed add (bad
+address, not found, etc.) is reported back to the UI rather than silently
+dropped or aborting the whole space, since Webex — not Signalstone —
+determines whether a given address is valid.
 
 ## Read/unread state: receive-only, live-only — sending is private-only
 
