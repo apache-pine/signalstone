@@ -1,7 +1,8 @@
 .signalstone-view { padding: 0 !important; }
 .signalstone-app { display: flex; flex-direction: column; height: 100%; min-width: 0; color: var(--text-normal); }
 .signalstone-app header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-bottom: 1px solid var(--background-modifier-border); }
-.signalstone-app h2 { margin: 0; font-size: var(--font-ui-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.signalstone-app h2 { margin: 0; min-width: 0; font-size: var(--font-ui-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.signalstone-header-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .signalstone-app button { cursor: pointer; }
 .signalstone-app button:focus-visible, .signalstone-app input:focus-visible, .signalstone-app textarea:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
 .signalstone-status { color: var(--text-muted); }
@@ -9,10 +10,12 @@
 .signalstone-header-actions { display: flex; gap: 6px; }
 .signalstone-search { margin: 10px; width: calc(100% - 20px); }
 .signalstone-space-list { overflow: auto; flex: 1; }
-.signalstone-view .signalstone-space-list > button { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; align-content: center; align-items: start; justify-content: stretch !important; justify-items: stretch !important; width: 100%; height: auto !important; min-height: 52px; gap: 3px; padding: 8px 12px; overflow: visible; border: 0; border-radius: 0; background: transparent; color: var(--text-normal); text-align: left !important; }
+.signalstone-view .signalstone-space-list > button { display: flex; align-items: center; gap: 8px; width: 100%; height: auto !important; min-height: 52px; padding: 8px 12px; overflow: visible; border: 0; border-radius: 0; background: transparent; color: var(--text-normal); text-align: left !important; }
 .signalstone-space-list > button:hover { background: var(--background-modifier-hover); }
-.signalstone-view .signalstone-space-list > button > span { display: block; justify-self: stretch !important; width: 100%; max-width: 100%; overflow: hidden; color: var(--text-normal); font-weight: var(--font-semibold); line-height: 1.25; text-align: left !important; text-overflow: ellipsis; white-space: nowrap; }
-.signalstone-view .signalstone-space-list > button > small { display: block; justify-self: stretch !important; width: 100%; overflow: hidden; color: var(--text-muted); line-height: 1.2; text-align: left !important; text-overflow: ellipsis; white-space: nowrap; }
+.signalstone-view .signalstone-space-list > button > div { display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0; flex: 1; }
+.signalstone-view .signalstone-space-list > button > div > span { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.signalstone-space-title { overflow: hidden; min-width: 0; color: var(--text-normal); font-weight: var(--font-semibold); line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.signalstone-view .signalstone-space-list > button > div > small { display: block; width: 100%; overflow: hidden; color: var(--text-muted); line-height: 1.2; text-align: left !important; text-overflow: ellipsis; white-space: nowrap; }
 .signalstone-empty, .signalstone-empty-list { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
 .signalstone-empty { height: 100%; }
 .signalstone-empty-list { color: var(--text-muted); }
@@ -99,8 +102,15 @@
 .signalstone-new-message-body input, .signalstone-new-message-body textarea { width: 100%; color: var(--text-normal); font-size: var(--font-ui-medium); }
 .signalstone-new-message-body textarea { min-height: 84px; resize: vertical; }
 .signalstone-people-results { display: flex; flex-direction: column; gap: 4px; }
-.signalstone-people-results > button { display: flex; flex-direction: column; align-items: flex-start; height: auto !important; min-height: 48px; padding: 7px 9px; text-align: left !important; }
+.signalstone-people-results > button { display: flex; flex-direction: row; align-items: center; gap: 8px; height: auto !important; min-height: 48px; padding: 7px 9px; text-align: left !important; }
+.signalstone-people-results > button > div { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
 .signalstone-people-results > button.is-selected { border-color: var(--interactive-accent); background: var(--background-modifier-active-hover); }
 .signalstone-people-results small { color: var(--text-muted); }
+.signalstone-avatar { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+.signalstone-person-name { display: flex; align-items: center; gap: 5px; }
+.signalstone-presence { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
+.signalstone-presence.is-available { background: var(--color-green); }
+.signalstone-presence.is-busy { background: var(--color-red); }
+.signalstone-presence.is-away { background: var(--color-yellow); }
 .signalstone-form-error { margin: 0; color: var(--text-error); }
 @media (prefers-reduced-motion: reduce) { .signalstone-app * { scroll-behavior: auto !important; transition: none !important; } }

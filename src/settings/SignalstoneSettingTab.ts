@@ -135,6 +135,32 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			},
 			{
 				type: 'group',
+				heading: 'Avatars & presence',
+				items: [
+					{
+						name: 'Show avatars in the conversation list',
+						desc: 'Direct messages only — Webex has no avatar image for a group space.',
+						control: { type: 'toggle', key: 'showAvatarsInRecents' },
+					},
+					{
+						name: 'Show presence in the conversation list',
+						desc: 'A colored dot for each direct message (active/busy/away). Refreshes on the same cadence as the conversation list itself.',
+						control: { type: 'toggle', key: 'showPresenceInRecents' },
+					},
+					{
+						name: 'Show avatars in direct message conversations',
+						desc: 'Shown in the conversation header.',
+						control: { type: 'toggle', key: 'showAvatarsInConversations' },
+					},
+					{
+						name: 'Show presence in direct message conversations',
+						desc: 'Shown in the conversation header, next to the other person\'s name.',
+						control: { type: 'toggle', key: 'showPresenceInConversations' },
+					},
+				],
+			},
+			{
+				type: 'group',
 				heading: 'Conversations',
 				items: [
 					{
@@ -216,6 +242,10 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			case 'pollingFrequency': return settings.pollingFrequency;
 			case 'messagePageSize': return String(settings.messagePageSize);
 			case 'alwaysScrollToNewest': return settings.alwaysScrollToNewest;
+			case 'showAvatarsInRecents': return settings.showAvatarsInRecents;
+			case 'showPresenceInRecents': return settings.showPresenceInRecents;
+			case 'showAvatarsInConversations': return settings.showAvatarsInConversations;
+			case 'showPresenceInConversations': return settings.showPresenceInConversations;
 			default: return undefined;
 		}
 	}
@@ -237,6 +267,10 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			case 'pollingFrequency': settings.pollingFrequency = value as PollingFrequency; break;
 			case 'messagePageSize': settings.messagePageSize = Number(value); break;
 			case 'alwaysScrollToNewest': settings.alwaysScrollToNewest = value as boolean; break;
+			case 'showAvatarsInRecents': settings.showAvatarsInRecents = value as boolean; break;
+			case 'showPresenceInRecents': settings.showPresenceInRecents = value as boolean; break;
+			case 'showAvatarsInConversations': settings.showAvatarsInConversations = value as boolean; break;
+			case 'showPresenceInConversations': settings.showPresenceInConversations = value as boolean; break;
 			default: return;
 		}
 		await this.plugin.saveSettings();

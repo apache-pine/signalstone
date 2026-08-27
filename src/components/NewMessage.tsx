@@ -3,6 +3,7 @@ import type { Person } from '../models/Person';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
 import { errorMessage } from '../utils/format';
 import { isValidEmail } from '../utils/email';
+import { presenceInfo } from '../utils/presence';
 
 /** Directory search (by name or exact email) to start a new direct message. */
 export function NewMessage({ store, onClose }: { store: SignalstoneStore; onClose: () => void }) {
@@ -69,12 +70,21 @@ export function NewMessage({ store, onClose }: { store: SignalstoneStore; onClos
 				</button>
 				{error && <p className="signalstone-form-error">{error}</p>}
 				<div className="signalstone-people-results">
-					{results.map((person) => (
-						<button className={recipient && 'id' in recipient && recipient.id === person.id ? 'is-selected' : ''} key={person.id} onClick={() => setRecipient(person)}>
-							<strong>{person.displayName}</strong>
-							<small>{person.emails[0] || 'Webex user'}</small>
-						</button>
-					))}
+					{results.map((person) => {
+						const presence = presenceInfo(person.status);
+						return (
+							<button className={recipient && 'id' in recipient && recipient.id === person.id ? 'is-selected' : ''} key={person.id} onClick={() => setRecipient(person)}>
+								{person.avatar && <img className="signalstone-avatar" src={person.avatar} alt="" loading="lazy" />}
+								<div>
+									<div className="signalstone-person-name">
+										<strong>{person.displayName}</strong>
+										{presence && <span className={`signalstone-presence is-${presence.category}`} title={presence.label} aria-label={presence.label} />}
+									</div>
+									<small>{person.emails[0] || 'Webex user'}</small>
+								</div>
+							</button>
+						);
+					})}
 					{exactEmail && (
 						<button className={recipient && 'email' in recipient ? 'is-selected' : ''} onClick={() => setRecipient({ email: query.trim() })}>
 							<strong>Use {query.trim()}</strong>

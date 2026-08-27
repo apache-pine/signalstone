@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { SignalstoneState, SignalstoneStore } from '../services/SignalstoneStore';
 import { formatDate, realtimeLabel } from '../utils/format';
+import { presenceInfo } from '../utils/presence';
 
 /** The "Recent" screen: connectivity status, local filtering, and the combined list of direct/group spaces. */
 export function ConversationList({ state, store, onNewMessage, onNewSpace }: { state: SignalstoneState; store: SignalstoneStore; onNewMessage: () => void; onNewSpace: () => void }) {
@@ -40,14 +41,25 @@ export function ConversationList({ state, store, onNewMessage, onNewSpace }: { s
 				</div>
 			)}
 			<div className="signalstone-space-list">
-				{spaces.map((space) => (
-					<button key={space.id} onClick={() => void store.selectSpace(space.id)}>
-						<span>{space.title || (space.type === 'direct' ? 'Direct message' : 'Unnamed space')}</span>
-						<small>
-							{space.type === 'direct' ? 'Direct message' : 'Group space'} · {formatDate(space.lastActivity, state.settings.timeFormat)}
-						</small>
-					</button>
-				))}
+				{spaces.map((space) => {
+					const isDirect = space.type === 'direct';
+					const info = isDirect ? state.directoryInfoBySpaceId[space.id] : undefined;
+					const presence = isDirect && state.settings.showPresenceInRecents ? presenceInfo(info?.status) : undefined;
+					return (
+						<button key={space.id} onClick={() => void store.selectSpace(space.id)}>
+							{isDirect && state.settings.showAvatarsInRecents && info?.avatar && <img className="signalstone-avatar" src={info.avatar} alt="" loading="lazy" />}
+							<div>
+								<span>
+									<span className="signalstone-space-title">{space.title || (space.type === 'direct' ? 'Direct message' : 'Unnamed space')}</span>
+									{presence && <span className={`signalstone-presence is-${presence.category}`} title={presence.label} aria-label={presence.label} />}
+								</span>
+								<small>
+									{space.type === 'direct' ? 'Direct message' : 'Group space'} · {formatDate(space.lastActivity, state.settings.timeFormat)}
+								</small>
+							</div>
+						</button>
+					);
+				})}
 				{!state.loading && !state.error && spaces.length === 0 && (
 					<div className="signalstone-empty-list">
 						<p>{filter ? 'No conversations match your filter.' : 'No Webex conversations were found.'}</p>

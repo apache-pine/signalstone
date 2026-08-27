@@ -4,6 +4,7 @@ import { parseFilenameFromContentDisposition } from '../src/utils/contentDisposi
 import { isImageContentType } from '../src/models/Attachment';
 import { formatDate, resolveSenderName } from '../src/utils/format';
 import { isValidEmail } from '../src/utils/email';
+import { presenceInfo } from '../src/utils/presence';
 import type { Space } from '../src/models/Space';
 
 describe('safe parsing helpers', () => {
@@ -20,6 +21,27 @@ describe('isValidEmail', () => {
 	it('rejects a bare name with no @ or domain', () => {
 		expect(isValidEmail('anthony')).toBe(false);
 		expect(isValidEmail('anthony@example')).toBe(false);
+	});
+});
+
+describe('presenceInfo', () => {
+	it('returns undefined when there is no status at all, so no dot renders', () => {
+		expect(presenceInfo(undefined)).toBeUndefined();
+	});
+
+	it('categorizes busy-shaped statuses (call, meeting, presenting, DoNotDisturb) as busy', () => {
+		expect(presenceInfo('call')?.category).toBe('busy');
+		expect(presenceInfo('meeting')?.category).toBe('busy');
+		expect(presenceInfo('presenting')?.category).toBe('busy');
+		expect(presenceInfo('DoNotDisturb')?.category).toBe('busy');
+	});
+
+	it('categorizes active as available', () => {
+		expect(presenceInfo('active')).toEqual({ category: 'available', label: 'Active' });
+	});
+
+	it('still returns a renderable (gray, "unknown") entry for the documented "unknown" status value, distinct from no status at all', () => {
+		expect(presenceInfo('unknown')).toEqual({ category: 'unknown', label: 'Status unknown' });
 	});
 });
 

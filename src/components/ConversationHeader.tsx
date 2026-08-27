@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import type { PresenceCategory } from '../utils/presence';
 
-/** Back button plus title, shared by the open-conversation and thread screens. Group spaces can rename in place via onRename. */
+/** Back button plus title, shared by the open-conversation and thread screens. Group spaces can rename in place via onRename. avatarUrl/presence are pre-resolved by Conversation.tsx (direct spaces only — see docs/WEBEX_CAPABILITIES.md, "Avatars and presence"). */
 export function ConversationHeader({
 	title,
 	isThread,
@@ -8,6 +9,8 @@ export function ConversationHeader({
 	onBack,
 	onOpenMembers,
 	onRename,
+	avatarUrl,
+	presence,
 }: {
 	title: string;
 	isThread: boolean;
@@ -16,6 +19,8 @@ export function ConversationHeader({
 	onOpenMembers?: () => void;
 	/** Present only for the main conversation view of a group space — see Conversation.tsx. Webex enforces who may actually rename a space server-side. */
 	onRename?: (title: string) => void;
+	avatarUrl?: string;
+	presence?: { category: PresenceCategory; label: string };
 }) {
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState(title);
@@ -31,6 +36,7 @@ export function ConversationHeader({
 			<button onClick={onBack} aria-label={isThread ? 'Back to conversation' : 'Back to conversations'}>
 				←
 			</button>
+			{avatarUrl && <img className="signalstone-avatar" src={avatarUrl} alt="" loading="lazy" />}
 			{editing ? (
 				<div className="signalstone-rename">
 					<input
@@ -52,7 +58,10 @@ export function ConversationHeader({
 				</div>
 			) : (
 				<div>
-					<h2>{title}</h2>
+					<div className="signalstone-header-title">
+						<h2>{title}</h2>
+						{presence && <span className={`signalstone-presence is-${presence.category}`} title={presence.label} aria-label={presence.label} />}
+					</div>
 					{subtitle && <small>{subtitle}</small>}
 				</div>
 			)}

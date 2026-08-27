@@ -10,6 +10,7 @@
 | Edit/delete own message | Supported | Implemented for the authenticated user's messages |
 | Mentions | Sending: documented markup (`<@personEmail:...\|Name>`, `<@personId:...\|Name>`, `<@all>`). Rendering: `<spark-mention>` — Webex's own tag, undocumented but confirmed live, see below | Incoming: renders both forms as a styled `@Name`/`@all` span. Outgoing: type `@` in a group space's composer for autocomplete against loaded members, plus `@all`; resolves to the documented send-time markup. Not offered in direct spaces (no one else to mention) or the edit-in-place box |
 | Membership management | [Memberships API](https://developer.webex.com/docs/api/v1/memberships) | List, add by email, moderator toggle, and remove implemented for group spaces |
+| Directory search / avatars / presence | [People API](https://developer.webex.com/docs/api/v1/people) | Name/email search implemented, results always show avatar/presence. Also available (four independent settings) in the conversation list and open direct-message conversations, direct spaces only — no avatar/presence concept exists for a group space. Refreshed on the conversation-list poll cadence, not live — see below |
 | Realtime | [Browser SDK](https://developer.webex.com/messaging/docs/sdks/browser) | Confirmed reaching `Live`; five issues found and fixed along the way (a crash, a CORS block, a room-id encoding mismatch, a missing plugin that silently broke every event envelope, and a conversation list that went stale once live) — see below |
 | Notifications | Obsidian `Notice` API | Off / direct messages + @mentions / direct messages only / all messages, for top-level messages from someone else in a space that isn't open; optional message preview; no sound. Mention detection uses the Message resource's own documented `mentionedPeople`/`mentionedGroups` fields (https://developer.webex.com/docs/api/v1/messages), not markdown parsing |
 | Read state | `memberships.on('seen', ...)` — public, live-wired; establishing/sending your own is private-only — see below | Receive-only, live-only: shows "Seen by …" on a message once a live receipt points at it |
@@ -64,6 +65,67 @@ tag's attributes (`data-object-type`, `data-object-id`) are skipped over,
 never read as anything meaningful, and the raw tag is never treated as
 HTML. Covered by a regression test in `test/webex-markdown.test.tsx` using
 the exact tag observed live.
+
+## Avatars and presence
+
+Both are fields already returned by `GET /people` — `avatar` (a Cisco-hosted
+image URL) and `status` (`active`/`call`/`meeting`/`presenting`/
+`DoNotDisturb`/`OutOfOffice`/`inactive`/`pending`/`unknown`, all documented) —
+parsed into `Person` by `PeopleApi`. `NewMessage`/`NewSpace` search results,
+the conversation list, and an open direct-message conversation can all show
+them, via four independent settings (avatar/presence × recents/
+conversations — see settings.ts) that each default off.
+
+**Group spaces confirmed to have neither.** Checked directly against the
+installed `@webex/plugin-rooms` source, the same way as the read-receipt and
+reaction investigations below — no `avatar`/`image`/`photo`/`icon` field
+appears anywhere in it, and the public Room resource schema has none either.
+Native Webex clients render a space's icon as generated initials/color, not
+an uploaded image, which matches: there is nothing to fetch. Avatars and
+presence are therefore direct-space-only everywhere in Signalstone, by
+necessity rather than choice.
+
+**Directory search** (`NewMessage`/`NewSpace`) costs nothing extra — every
+result already carries both fields from the search itself; showing them is
+pure rendering. **The conversation list and an open DM cost more**, since
+neither `Space` nor `Membership` carries the other participant's `avatar`/
+`status` — getting there takes two steps, run only when at least one of the
+four settings is on:
+
+1. **Resolve** each direct space's other member via `membershipsApi.list({
+   spaceId })` (the same call `MemberList` already uses for group spaces) —
+   once per space, ever, cached in memory for the store's lifetime. A direct
+   space's two participants never change, so this never repeats for a space
+   already resolved.
+2. **Batch-fetch** avatar/status for every resolved person id in one
+   `people.list({ ids: [...] })` call (`PeopleApi` already supported batching
+   by id; it just had no caller). One request regardless of how many DMs are
+   open in the list.
+
+**Refresh cadence: piggybacked on the conversation-list refresh, not a
+separate timer.** `refreshDirectoryInfo()` runs at the end of `loadSpaces()`
+— which already fires on initial load, a manual refresh click, and every
+`refresh-space-list` realtime event (live or not, every `pollingFrequency`-
+configured interval since issue 5's fix). Turning a setting on for the first
+time also triggers one immediate refresh (via `setSettings()`), so results
+appear right away rather than waiting up to a full interval. No new
+setInterval, and the existing "Realtime polling frequency" setting already
+controls how fresh this is, rather than adding a second, redundant cadence
+knob.
+
+Two things worth being explicit about, both true regardless of where a photo
+is shown:
+
+- **The avatar `<img src>` is unauthenticated**, unlike message attachment
+  URLs. Attachment content requires the bearer token as an Authorization
+  header (see AttachmentPreview's `requestUrl`-backed fetch-then-blob-URL
+  approach, and why a bare `<img src>` can't be used there at all) — Webex's
+  avatar URLs are plain, directly loadable CDN links, so a bare `<img>` tag
+  works and is loaded lazily (`loading="lazy"`).
+- **Presence is a periodic snapshot, not a live subscription.** There is no
+  realtime presence-change event wired up (and no plan to poll faster than
+  the conversation-list cadence for it) — it reflects whatever `GET /people`
+  last returned, refreshed on the cadence described above.
 
 ## Space management: create, rename, leave
 

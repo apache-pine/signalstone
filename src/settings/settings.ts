@@ -36,6 +36,17 @@ export interface SignalstoneSettings {
 	messagePageSize: number;
 	/** If false, the message list only auto-scrolls to a new message when you were already near the bottom, instead of always jumping down. */
 	alwaysScrollToNewest: boolean;
+	/**
+	 * Four independent toggles (recents vs. open-conversation, avatar vs.
+	 * presence) so e.g. presence-only in the recents list and both in an open
+	 * DM is expressible directly, rather than one combined on/off. Direct
+	 * (1:1) spaces only — Webex has no avatar/presence concept for a group
+	 * space. See docs/WEBEX_CAPABILITIES.md, "Avatars and presence".
+	 */
+	showAvatarsInRecents: boolean;
+	showPresenceInRecents: boolean;
+	showAvatarsInConversations: boolean;
+	showPresenceInConversations: boolean;
 }
 
 export const DEFAULT_SETTINGS: SignalstoneSettings = {
@@ -54,6 +65,10 @@ export const DEFAULT_SETTINGS: SignalstoneSettings = {
 	pollingFrequency: 'normal',
 	messagePageSize: 50,
 	alwaysScrollToNewest: true,
+	showAvatarsInRecents: false,
+	showPresenceInRecents: false,
+	showAvatarsInConversations: false,
+	showPresenceInConversations: false,
 };
 
 /**

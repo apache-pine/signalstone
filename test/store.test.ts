@@ -4,9 +4,11 @@ import type { RealtimeEvent, RealtimeProvider, RealtimeStatus } from '../src/rea
 import type { Space } from '../src/models/Space';
 import type { WebexMessage } from '../src/models/Message';
 import type { Membership } from '../src/models/Membership';
+import type { Person } from '../src/models/Person';
 import { DEFAULT_SETTINGS } from '../src/settings/settings';
 
 const space = (title: string): Space => ({ id: 'room', title, type: 'group', isLocked: false, lastActivity: '2026-01-01T00:00:00Z', creatorId: 'me', created: '2026-01-01T00:00:00Z' });
+const directSpace = (title: string): Space => ({ ...space(title), type: 'direct' });
 const message = (overrides: Partial<WebexMessage> = {}): WebexMessage => ({ id: 'message', spaceId: 'room', spaceType: 'group', personId: 'me', personEmail: 'me@example.com', text: 'Hello', created: '2026-01-01T00:00:00Z', isEdited: false, ...overrides });
 const membership = (overrides: Partial<Membership> = {}): Membership => ({ id: 'membership', spaceId: 'room', personId: 'them', personEmail: 'them@example.com', personDisplayName: 'Them', isModerator: false, isMonitor: false, created: '2026-01-01T00:00:00Z', ...overrides });
 
@@ -26,15 +28,16 @@ function createStore(list: () => Promise<{ items: Space[]; nextUrl?: string }>, 
 	const memberships = { list: vi.fn(async (): Promise<{ items: Membership[]; nextUrl?: string }> => ({ items: [membership()], nextUrl: undefined })), add: vi.fn(async (spaceId: string, personEmail: string) => membership({ id: 'new', personEmail, spaceId })), setModerator: vi.fn(async (id: string, isModerator: boolean) => membership({ id, isModerator })), remove: vi.fn(async () => undefined) };
 	const realtime = new FakeRealtime();
 	const spaces = { list, create: vi.fn(async (title: string) => space(title)), rename: vi.fn(async (spaceId: string, title: string) => ({ ...space(title), id: spaceId })), delete: vi.fn(async () => undefined) };
+	const people = { list: vi.fn(async (): Promise<Person[]> => []) };
 	const store = new SignalstoneStore(
 		{ status: 'connected', person: { id: 'me', displayName: 'Me', emails: [] } },
 		spaces, messages, realtime,
 		{ fetch: vi.fn() },
-		{ list: vi.fn(async () => []) },
+		people,
 		memberships,
 		settings,
 	);
-	return { store, messages, memberships, realtime, spaces };
+	return { store, messages, memberships, realtime, spaces, people };
 }
 
 describe('SignalstoneStore', () => {
@@ -101,6 +104,58 @@ describe('SignalstoneStore', () => {
 		expect(spaces.delete).toHaveBeenCalledWith('room');
 		expect(store.getSnapshot().spaces).toEqual([]);
 		expect(store.getSnapshot().selectedSpaceId).toBeNull();
+	});
+
+	it('never resolves or fetches avatar/presence when none of the four settings are on', async () => {
+		const { store, memberships, people } = createStore(async () => ({ items: [directSpace('Alex')], nextUrl: undefined }));
+		await store.loadSpaces();
+
+		expect(people.list).not.toHaveBeenCalled();
+		expect(memberships.list).not.toHaveBeenCalled();
+		expect(store.getSnapshot().directoryInfoBySpaceId).toEqual({});
+	});
+
+	it('resolves the other member of a direct space and populates avatar/presence, once a setting is on', async () => {
+		const { store, memberships, people } = createStore(async () => ({ items: [directSpace('Alex')], nextUrl: undefined }), { ...DEFAULT_SETTINGS, showPresenceInRecents: true });
+		memberships.list.mockResolvedValueOnce({ items: [membership({ personId: 'me', personEmail: 'me@example.com' }), membership({ personId: 'them', personEmail: 'them@example.com' })], nextUrl: undefined });
+		people.list.mockResolvedValueOnce([{ id: 'them', emails: ['them@example.com'], displayName: 'Alex', avatar: 'https://example.com/avatar.jpg', orgId: 'org', type: 'person' as const, status: 'active' as const }]);
+
+		// refreshDirectoryInfo runs fire-and-forget (loadSpaces() does not await
+		// it, so the space list itself never waits on it) -- flush to let its
+		// own membership-then-people chain actually finish before asserting.
+		await store.loadSpaces();
+		await flushMicrotasks();
+
+		expect(memberships.list).toHaveBeenCalledWith(expect.objectContaining({ spaceId: 'room' }));
+		expect(people.list).toHaveBeenCalledWith({ ids: ['them'] });
+		expect(store.getSnapshot().directoryInfoBySpaceId.room).toEqual({ avatar: 'https://example.com/avatar.jpg', status: 'active' });
+	});
+
+	it('caches the resolved other-member id, so a later refresh only re-fetches presence, not membership', async () => {
+		const { store, memberships, people } = createStore(async () => ({ items: [directSpace('Alex')], nextUrl: undefined }), { ...DEFAULT_SETTINGS, showPresenceInRecents: true });
+		memberships.list.mockResolvedValue({ items: [membership({ personId: 'me' }), membership({ personId: 'them' })], nextUrl: undefined });
+		people.list.mockResolvedValue([{ id: 'them', emails: [], displayName: 'Alex', orgId: 'org', type: 'person' as const, status: 'meeting' as const }]);
+
+		await store.loadSpaces();
+		await flushMicrotasks();
+		await store.loadSpaces();
+		await flushMicrotasks();
+
+		expect(memberships.list).toHaveBeenCalledOnce();
+		expect(people.list).toHaveBeenCalledTimes(2);
+	});
+
+	it('refreshes immediately when setSettings newly turns on an avatar/presence setting, without waiting for the next space-list load', async () => {
+		const { store, memberships, people } = createStore(async () => ({ items: [directSpace('Alex')], nextUrl: undefined }));
+		await store.loadSpaces(); // baseline: nothing enabled yet
+		memberships.list.mockResolvedValueOnce({ items: [membership({ personId: 'me' }), membership({ personId: 'them' })], nextUrl: undefined });
+		people.list.mockResolvedValueOnce([{ id: 'them', emails: [], displayName: 'Alex', orgId: 'org', type: 'person' as const, status: 'call' as const }]);
+
+		store.setSettings({ ...DEFAULT_SETTINGS, showAvatarsInConversations: true });
+		await flushMicrotasks();
+
+		expect(people.list).toHaveBeenCalledOnce();
+		expect(store.getSnapshot().directoryInfoBySpaceId.room?.status).toBe('call');
 	});
 
 	it('lists, adds, promotes, and removes space members through the memberships API', async () => {
