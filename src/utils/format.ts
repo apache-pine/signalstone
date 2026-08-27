@@ -43,6 +43,19 @@ export function resolveSenderName(message: { personDisplayName?: string; personE
 	return message.personEmail;
 }
 
+/**
+ * Webex Markdown only treats a line ending in two-or-more spaces as a hard
+ * line break; a bare newline is a soft join (rendered as a space) in every
+ * Webex client, including Signalstone's own renderer (see
+ * utils/webexMarkdown.tsx). The composer's Shift+Enter inserts a bare
+ * newline, so without this a multi-line draft would collapse onto one line
+ * everywhere it's rendered. Applied only to the outgoing `markdown` field —
+ * the plain-text fallback doesn't need markdown escaping.
+ */
+export function toWebexMarkdown(text: string): string {
+	return text.replace(/ *\n/g, '  \n');
+}
+
 /** Extracts a safe, user-facing message from a caught error, falling back to a generic message. */
 export function errorMessage(error: unknown, fallback: string): string {
 	if (typeof error === 'object' && error !== null && 'userMessage' in error) {

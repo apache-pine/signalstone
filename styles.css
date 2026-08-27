@@ -38,8 +38,17 @@
 .signalstone-message.is-own { border-left: 2px solid var(--interactive-accent); }
 .signalstone-message > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
 .signalstone-message time { color: var(--text-muted); font-size: var(--font-ui-smaller); white-space: nowrap; }
-.signalstone-message-text { margin-top: 4px; white-space: pre-wrap; line-height: 1.45; }
+.signalstone-message-text { margin-top: 4px; white-space: pre-wrap; line-height: 1.45; overflow-wrap: anywhere; }
+.signalstone-message-text p { margin: 0 0 4px; }
+.signalstone-message-text p:last-child { margin-bottom: 0; }
+.signalstone-message-text ul, .signalstone-message-text ol { margin: 4px 0; padding-left: 20px; }
+.signalstone-message-text li { margin: 2px 0; }
+.signalstone-message-text blockquote { margin: 4px 0; padding: 2px 10px; border-left: 3px solid var(--background-modifier-border); color: var(--text-muted); }
+.signalstone-message-text blockquote p { margin: 0; }
+.signalstone-message-text pre { margin: 6px 0; padding: 8px; overflow-x: auto; border-radius: var(--radius-s); background: var(--code-background); }
+.signalstone-message-text pre code { padding: 0; background: transparent; }
 .signalstone-message-text code { padding: 1px 3px; border-radius: 3px; background: var(--code-background); color: var(--code-normal); }
+.signalstone-mention { padding: 0 3px; border-radius: 3px; background: var(--background-modifier-hover); color: var(--interactive-accent); font-weight: var(--font-semibold); }
 .signalstone-attachment, .signalstone-file { margin-top: 6px; padding: 6px; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); }
 .signalstone-attachment { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; color: var(--text-normal); background: var(--background-secondary); }
 .signalstone-attachment.is-error { color: var(--text-error); }
@@ -66,8 +75,13 @@
 .signalstone-edit textarea { width: 100%; min-height: 60px; }
 .signalstone-edit > div { display: flex; justify-content: flex-end; gap: 6px; margin-top: 5px; }
 .signalstone-composer { padding: 8px; border-top: 1px solid var(--background-modifier-border); }
+.signalstone-composer-input { position: relative; }
 .signalstone-composer textarea { width: 100%; min-height: 64px; resize: vertical; }
 .signalstone-composer > div:last-child { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.signalstone-mention-suggestions { position: absolute; z-index: 1; bottom: 100%; left: 0; width: 100%; max-height: 160px; margin: 0 0 4px; padding: 4px; overflow-y: auto; list-style: none; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); background: var(--background-primary); box-shadow: var(--shadow-s); }
+.signalstone-mention-suggestions li { display: flex; flex-direction: column; padding: 5px 8px; border-radius: var(--radius-s); cursor: pointer; }
+.signalstone-mention-suggestions li.is-highlighted, .signalstone-mention-suggestions li:hover { background: var(--background-modifier-hover); }
+.signalstone-mention-suggestions small { color: var(--text-muted); }
 .signalstone-attach { cursor: pointer; padding: 6px; }
 .signalstone-attach input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .signalstone-error { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px; padding: 8px; color: var(--text-error); background: var(--background-modifier-error); border-radius: var(--radius-s); }
