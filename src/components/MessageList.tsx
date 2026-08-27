@@ -12,6 +12,7 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 	const end = useRef<HTMLDivElement>(null);
 	const threadParent = state.threadParentId ? state.messages.find((message) => message.id === state.threadParentId) : undefined;
 	const displayedMessages = state.threadParentId ? state.threadMessages : state.messages;
+	const space = state.spaces.find((item) => item.id === state.selectedSpaceId);
 
 	useEffect(() => {
 		const target = end.current;
@@ -27,7 +28,7 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 		<div className="signalstone-messages">
 			{threadParent && (
 				<div className="signalstone-thread-parent">
-					<MessageItem message={threadParent} own={threadParent.personId === selfId} store={store} compact />
+					<MessageItem message={threadParent} own={threadParent.personId === selfId} store={store} space={space} compact />
 				</div>
 			)}
 			{!state.threadParentId && state.nextMessagesUrl && (
@@ -46,6 +47,7 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 						message={message}
 						own={message.personId === selfId}
 						store={store}
+						space={space}
 						replyCount={state.threadReplyCounts[message.id] ?? 0}
 						onReply={state.threadParentId ? undefined : () => void store.openThread(message.id)}
 						onDelete={() => void store.deleteMessage(message.id)}
@@ -53,7 +55,7 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 					{!state.threadParentId &&
 						(state.threadRepliesByParent[message.id] ?? []).map((reply) => (
 							<div className="signalstone-inline-reply" key={reply.id}>
-								<MessageItem message={reply} own={reply.personId === selfId} store={store} onDelete={() => void store.deleteMessage(reply.id)} compact />
+								<MessageItem message={reply} own={reply.personId === selfId} store={store} space={space} onDelete={() => void store.deleteMessage(reply.id)} compact />
 							</div>
 						))}
 				</Fragment>
