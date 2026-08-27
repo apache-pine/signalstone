@@ -11,6 +11,7 @@ interface MembershipDto {
 	personOrgId?: string;
 	isModerator?: boolean;
 	isMonitor?: boolean;
+	isRoomHidden?: boolean;
 	created?: string;
 }
 
@@ -24,11 +25,13 @@ function mapMembership(dto: MembershipDto): Membership {
 		personOrgId: dto.personOrgId,
 		isModerator: dto.isModerator ?? false,
 		isMonitor: dto.isMonitor ?? false,
+		isRoomHidden: dto.isRoomHidden ?? false,
 		created: dto.created ?? new Date(0).toISOString(),
 	};
 }
 
 export interface ListMembershipsQuery {
+	/** Omit to list the authenticated user's own membership across every space they belong to (Webex's documented behavior for GET /memberships with no roomId) — used to bulk-resolve which spaces are hidden, see SignalstoneStore.loadSpaces. */
 	spaceId?: string;
 	personId?: string;
 	personEmail?: string;
@@ -68,6 +71,16 @@ export class MembershipsApi {
 			method: 'PUT',
 			path: `/memberships/${encodeURIComponent(membershipId)}`,
 			json: { isModerator },
+		});
+		return mapMembership(data);
+	}
+
+	/** Hides or unhides a space from the authenticated user's own view, without leaving it. Direct spaces only in Signalstone's UI — see docs/WEBEX_CAPABILITIES.md. */
+	async setHidden(membershipId: string, isRoomHidden: boolean): Promise<Membership> {
+		const { data } = await this.client.request<MembershipDto>({
+			method: 'PUT',
+			path: `/memberships/${encodeURIComponent(membershipId)}`,
+			json: { isRoomHidden },
 		});
 		return mapMembership(data);
 	}

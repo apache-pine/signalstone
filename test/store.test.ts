@@ -10,7 +10,7 @@ import { DEFAULT_SETTINGS } from '../src/settings/settings';
 const space = (title: string): Space => ({ id: 'room', title, type: 'group', isLocked: false, lastActivity: '2026-01-01T00:00:00Z', creatorId: 'me', created: '2026-01-01T00:00:00Z' });
 const directSpace = (title: string): Space => ({ ...space(title), type: 'direct' });
 const message = (overrides: Partial<WebexMessage> = {}): WebexMessage => ({ id: 'message', spaceId: 'room', spaceType: 'group', personId: 'me', personEmail: 'me@example.com', text: 'Hello', created: '2026-01-01T00:00:00Z', isEdited: false, ...overrides });
-const membership = (overrides: Partial<Membership> = {}): Membership => ({ id: 'membership', spaceId: 'room', personId: 'them', personEmail: 'them@example.com', personDisplayName: 'Them', isModerator: false, isMonitor: false, created: '2026-01-01T00:00:00Z', ...overrides });
+const membership = (overrides: Partial<Membership> = {}): Membership => ({ id: 'membership', spaceId: 'room', personId: 'them', personEmail: 'them@example.com', personDisplayName: 'Them', isModerator: false, isMonitor: false, isRoomHidden: false, created: '2026-01-01T00:00:00Z', ...overrides });
 
 class FakeRealtime implements RealtimeProvider {
 	status: RealtimeStatus = 'degraded';
@@ -25,7 +25,7 @@ const flushMicrotasks = () => new Promise((resolve) => window.setTimeout(resolve
 
 function createStore(list: () => Promise<{ items: Space[]; nextUrl?: string }>, settings = DEFAULT_SETTINGS) {
 	const messages = { list: vi.fn(async (): Promise<{ items: WebexMessage[]; nextUrl?: string }> => ({ items: [], nextUrl: undefined })), listReplies: vi.fn(async (): Promise<WebexMessage[]> => []), get: vi.fn(async () => message()), create: vi.fn(async (input: { parentId?: string }) => message({ parentId: input.parentId })), update: vi.fn(async (_id: string, input: { text?: string }) => message({ text: input.text, isEdited: true })), delete: vi.fn(async () => undefined) };
-	const memberships = { list: vi.fn(async (): Promise<{ items: Membership[]; nextUrl?: string }> => ({ items: [membership()], nextUrl: undefined })), add: vi.fn(async (spaceId: string, personEmail: string) => membership({ id: 'new', personEmail, spaceId })), setModerator: vi.fn(async (id: string, isModerator: boolean) => membership({ id, isModerator })), remove: vi.fn(async () => undefined) };
+	const memberships = { list: vi.fn(async (_query?: { spaceId?: string; personId?: string; personEmail?: string; max?: number }): Promise<{ items: Membership[]; nextUrl?: string }> => ({ items: [membership()], nextUrl: undefined })), add: vi.fn(async (spaceId: string, personEmail: string) => membership({ id: 'new', personEmail, spaceId })), setModerator: vi.fn(async (id: string, isModerator: boolean) => membership({ id, isModerator })), setHidden: vi.fn(async (id: string, isRoomHidden: boolean) => membership({ id, isRoomHidden })), remove: vi.fn(async () => undefined) };
 	const realtime = new FakeRealtime();
 	const spaces = { list, create: vi.fn(async (title: string) => space(title)), rename: vi.fn(async (spaceId: string, title: string) => ({ ...space(title), id: spaceId })), delete: vi.fn(async () => undefined) };
 	const people = { list: vi.fn(async (): Promise<Person[]> => []) };
@@ -106,12 +106,66 @@ describe('SignalstoneStore', () => {
 		expect(store.getSnapshot().selectedSpaceId).toBeNull();
 	});
 
+	it('excludes a hidden space from the list by default, but includes it (marked) when "Show hidden conversations" is on', async () => {
+		const { store, memberships } = createStore(async () => ({ items: [space('Visible'), { ...directSpace('Hidden DM'), id: 'hidden-room' }], nextUrl: undefined }));
+		memberships.list.mockResolvedValueOnce({ items: [membership({ spaceId: 'hidden-room', isRoomHidden: true })], nextUrl: undefined });
+
+		await store.loadSpaces();
+		expect(store.getSnapshot().spaces.map((item) => item.id)).toEqual(['room']);
+		expect(store.getSnapshot().hiddenSpaceIds).toEqual({ 'hidden-room': true });
+
+		store.setSettings({ ...DEFAULT_SETTINGS, showHiddenConversations: true });
+		await flushMicrotasks();
+		expect(store.getSnapshot().spaces.map((item) => item.id).sort()).toEqual(['hidden-room', 'room']);
+	});
+
+	it('hides a space via the membership flag and drops it from the list', async () => {
+		const { store, memberships } = createStore(async () => ({ items: [space('Room')], nextUrl: undefined }));
+		await store.loadSpaces();
+		memberships.list.mockResolvedValueOnce({ items: [membership({ id: 'self-membership', personId: 'me' })], nextUrl: undefined });
+
+		await store.hideSpace('room');
+
+		expect(memberships.setHidden).toHaveBeenCalledWith('self-membership', true);
+		expect(store.getSnapshot().spaces).toEqual([]);
+		expect(store.getSnapshot().hiddenSpaceIds.room).toBe(true);
+	});
+
+	it('unhides a space via the membership flag', async () => {
+		const { store, memberships } = createStore(async () => ({ items: [], nextUrl: undefined }));
+		memberships.list.mockResolvedValueOnce({ items: [membership({ id: 'self-membership', personId: 'me' })], nextUrl: undefined });
+
+		await store.unhideSpace('hidden-room');
+
+		expect(memberships.setHidden).toHaveBeenCalledWith('self-membership', false);
+		expect(store.getSnapshot().hiddenSpaceIds['hidden-room']).toBeUndefined();
+	});
+
+	it('does not notify for background activity in a space the user has hidden', async () => {
+		const { store, memberships, messages, realtime } = createStore(async () => ({ items: [directSpace('Room')], nextUrl: undefined }));
+		await store.loadSpaces();
+		const notified: WebexMessage[] = [];
+		store.notify = (item) => notified.push(item);
+
+		memberships.list.mockResolvedValueOnce({ items: [membership({ id: 'self-membership', personId: 'me' })], nextUrl: undefined });
+		await store.hideSpace('room');
+
+		messages.get.mockResolvedValueOnce(message({ id: 'in-hidden-space', spaceId: 'room', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room', messageId: 'in-hidden-space' });
+		await flushMicrotasks();
+
+		expect(notified).toHaveLength(0);
+	});
+
 	it('never resolves or fetches avatar/presence when none of the four settings are on', async () => {
 		const { store, memberships, people } = createStore(async () => ({ items: [directSpace('Alex')], nextUrl: undefined }));
 		await store.loadSpaces();
 
 		expect(people.list).not.toHaveBeenCalled();
-		expect(memberships.list).not.toHaveBeenCalled();
+		// memberships.list still gets one always-on, space-scoped-nowhere call
+		// for hidden-conversation status (see fetchHiddenSpaceIds) -- it's the
+		// per-space "who's the other member" resolution that must stay gated.
+		expect(memberships.list.mock.calls.every(([query]) => query?.spaceId === undefined)).toBe(true);
 		expect(store.getSnapshot().directoryInfoBySpaceId).toEqual({});
 	});
 
@@ -141,7 +195,8 @@ describe('SignalstoneStore', () => {
 		await store.loadSpaces();
 		await flushMicrotasks();
 
-		expect(memberships.list).toHaveBeenCalledOnce();
+		const spaceScopedCalls = memberships.list.mock.calls.filter(([query]) => query?.spaceId !== undefined);
+		expect(spaceScopedCalls).toHaveLength(1); // resolved once, then cached -- even though loadSpaces() ran twice
 		expect(people.list).toHaveBeenCalledTimes(2);
 	});
 
@@ -310,5 +365,19 @@ describe('SignalstoneStore', () => {
 		const updated = { ...DEFAULT_SETTINGS, messageDensity: 'compact' as const };
 		store.setSettings(updated);
 		expect(store.getSnapshot().settings).toEqual(updated);
+	});
+
+	it('toggles a space in and out of favorites, and reports the change back to the host for persistence', async () => {
+		const { store } = createStore(async () => ({ items: [], nextUrl: undefined }));
+		const persisted: string[][] = [];
+		store.onSettingsChanged = (settings) => persisted.push(settings.favoriteSpaceIds);
+
+		store.toggleFavorite('room');
+		expect(store.getSnapshot().settings.favoriteSpaceIds).toEqual(['room']);
+		expect(persisted).toEqual([['room']]);
+
+		store.toggleFavorite('room');
+		expect(store.getSnapshot().settings.favoriteSpaceIds).toEqual([]);
+		expect(persisted).toEqual([['room'], []]);
 	});
 });
