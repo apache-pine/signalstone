@@ -18,6 +18,7 @@ import { SignalstoneSettingTab } from './settings/SignalstoneSettingTab';
 import { DEFAULT_SETTINGS, type SignalstoneSettings } from './settings/settings';
 import type { WebexMessage } from './models/Message';
 import { debugLog, setDebugLogging } from './utils/logger';
+import { resolveSenderName } from './utils/format';
 
 export default class SignalstonePlugin extends Plugin {
 	settings: SignalstoneSettings = DEFAULT_SETTINGS;
@@ -89,8 +90,8 @@ export default class SignalstonePlugin extends Plugin {
 		if (this.settings.notifications === 'off') return;
 		if (this.settings.notifications === 'direct' && message.spaceType !== 'direct') return;
 
-		const from = message.personDisplayName || message.personEmail;
 		const space = this.store.getSnapshot().spaces.find((item) => item.id === message.spaceId);
+		const from = resolveSenderName(message, space);
 		const where = message.spaceType === 'direct' ? '' : space ? ` in ${space.title}` : '';
 		const text = message.text ?? (message.files?.length ? 'Sent an attachment' : 'Sent a message');
 		const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;

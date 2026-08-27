@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { WebexMessage } from '../models/Message';
+import type { Space } from '../models/Space';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
-import { formatDate } from '../utils/format';
+import { formatDate, resolveSenderName } from '../utils/format';
 import { renderText } from '../utils/renderText';
 import { AttachmentPreview } from './AttachmentPreview';
 
@@ -9,6 +10,7 @@ export function MessageItem({
 	message,
 	own,
 	store,
+	space,
 	onDelete,
 	onReply,
 	replyCount = 0,
@@ -17,6 +19,8 @@ export function MessageItem({
 	message: WebexMessage;
 	own: boolean;
 	store: SignalstoneStore;
+	/** The open conversation's space, used to resolve a DM sender's display name (see resolveSenderName). */
+	space?: Space;
 	onDelete?: () => void;
 	onReply?: () => void;
 	replyCount?: number;
@@ -40,7 +44,7 @@ export function MessageItem({
 	return (
 		<article className={`signalstone-message${own ? ' is-own' : ''}${compact ? ' is-compact' : ''}`}>
 			<div>
-				<strong>{own ? 'You' : message.personDisplayName || message.personEmail}</strong>
+				<strong>{own ? 'You' : resolveSenderName(message, space)}</strong>
 				<time>{formatDate(message.created)}</time>
 			</div>
 			{editing ? (
