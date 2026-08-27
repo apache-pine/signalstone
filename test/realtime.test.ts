@@ -73,6 +73,32 @@ describe('WebexRealtimeProvider', () => {
 		expect(events).toEqual([{ type: 'message-created', messageId: 'message-1', spaceId: 'room-1' }]);
 	});
 
+	it('converts a live membership "seen" event into a membership-seen realtime event', async () => {
+		const handle = sdkHandle();
+		const provider = new WebexRealtimeProvider({ getToken: () => 'secret', createSdk: async () => handle });
+		const events: RealtimeEvent[] = [];
+		provider.onEvent((event) => events.push(event));
+
+		await provider.start();
+		handle.memberships.emit('seen', { data: { roomId: 'room-1', personId: 'person-1', personDisplayName: 'Anthony Perez', personEmail: 'anthony@example.com', lastSeenId: 'message-1', created: '2026-01-01T00:00:00Z' } });
+
+		expect(events).toEqual([
+			{ type: 'membership-seen', spaceId: 'room-1', personId: 'person-1', personDisplayName: 'Anthony Perez', personEmail: 'anthony@example.com', lastSeenMessageId: 'message-1', seenAt: '2026-01-01T00:00:00Z' },
+		]);
+	});
+
+	it('drops a "seen" event missing the fields a receipt needs, rather than forwarding a broken one', async () => {
+		const handle = sdkHandle();
+		const provider = new WebexRealtimeProvider({ getToken: () => 'secret', createSdk: async () => handle });
+		const events: RealtimeEvent[] = [];
+		provider.onEvent((event) => events.push(event));
+
+		await provider.start();
+		handle.memberships.emit('seen', { data: { roomId: 'room-1', personId: 'person-1' } }); // missing lastSeenId
+
+		expect(events).toEqual([]);
+	});
+
 	it('cleans up a partially initialized SDK before scheduling a reconnect', async () => {
 		const handle = sdkHandle();
 		handle.rooms.listen.mockRejectedValueOnce(new Error('offline'));

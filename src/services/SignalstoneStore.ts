@@ -9,6 +9,7 @@ import type { PeopleApi } from '../api/PeopleApi';
 import type { Person } from '../models/Person';
 import type { MembershipsApi } from '../api/MembershipsApi';
 import type { Membership } from '../models/Membership';
+import type { ReadReceipt } from '../models/ReadReceipt';
 import { debugLog } from '../utils/logger';
 import { toWebexMarkdown } from '../utils/format';
 import { DEFAULT_SETTINGS, type SignalstoneSettings } from '../settings/settings';
@@ -25,6 +26,8 @@ export interface SignalstoneState {
 	threadMessages: WebexMessage[];
 	threadReplyCounts: Record<string, number>;
 	threadRepliesByParent: Record<string, WebexMessage[]>;
+	/** Other members' read receipts, by space then by their personId. Receive-only and live-only — see docs/WEBEX_CAPABILITIES.md, "Read/unread state". */
+	readReceiptsBySpace: Record<string, Record<string, ReadReceipt>>;
 	nextMessagesUrl?: string;
 	loading: boolean;
 	error?: string;
@@ -58,7 +61,7 @@ export class SignalstoneStore {
 		private readonly membershipsApi: Pick<MembershipsApi, 'list' | 'add' | 'setModerator' | 'remove'>,
 		settings: SignalstoneSettings = DEFAULT_SETTINGS,
 	) {
-		this.state = { connection, realtime: realtimeProvider.status, realtimeDetail: realtimeProvider.detail, settings, spaces: [], selectedSpaceId: null, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, loading: false };
+		this.state = { connection, realtime: realtimeProvider.status, realtimeDetail: realtimeProvider.detail, settings, spaces: [], selectedSpaceId: null, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, readReceiptsBySpace: {}, loading: false };
 		this.unsubscribeRealtime = realtimeProvider.onEvent((event) => void this.handleRealtime(event));
 		this.unsubscribeRealtimeStatus = realtimeProvider.onStatusChange((realtime) => this.patch({ realtime, realtimeDetail: realtimeProvider.detail }));
 	}
@@ -190,6 +193,7 @@ export class SignalstoneStore {
 		if (event.type === 'refresh-space-list') { await this.loadSpaces(); return; }
 		if (event.type === 'poll-tick') { if (event.view.spaceId === this.state.selectedSpaceId) await this.refreshMessages(); return; }
 		if (event.type === 'memberships-changed') return;
+		if (event.type === 'membership-seen') { this.recordReadReceipt(event); return; }
 		if (event.type === 'message-deleted') {
 			// Not gated on event.spaceId matching the open space (see the canonical-ID
 			// note below) — filtering an array for an id it doesn't contain is a
@@ -281,6 +285,23 @@ export class SignalstoneStore {
 		const bumped = this.state.spaces.map((space) => (space.id === spaceId ? { ...space, lastActivity: activityAt } : space));
 		bumped.sort((a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity));
 		this.patch({ spaces: bumped });
+	}
+
+	/**
+	 * Records someone else's read receipt from a live 'membership-seen' event.
+	 * Ignores the current user's own receipts (Signalstone never sends one, so
+	 * one showing up would only mean another of the account's own clients did
+	 * — not useful to show "seen by you") and an out-of-order event that's
+	 * older than what's already recorded for that person.
+	 */
+	private recordReadReceipt(event: Extract<RealtimeEvent, { type: 'membership-seen' }>): void {
+		const selfId = this.state.connection.status === 'connected' ? this.state.connection.person.id : undefined;
+		if (event.personId === selfId) return;
+		const bySpace = this.state.readReceiptsBySpace[event.spaceId] ?? {};
+		const existing = bySpace[event.personId];
+		if (existing && Date.parse(event.seenAt) <= Date.parse(existing.seenAt)) return;
+		const receipt: ReadReceipt = { personId: event.personId, personDisplayName: event.personDisplayName, personEmail: event.personEmail, lastSeenMessageId: event.lastSeenMessageId, seenAt: event.seenAt };
+		this.patch({ readReceiptsBySpace: { ...this.state.readReceiptsBySpace, [event.spaceId]: { ...bySpace, [event.personId]: receipt } } });
 	}
 
 	private normalize(messages: WebexMessage[]): WebexMessage[] {

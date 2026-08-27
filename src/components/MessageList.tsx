@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef } from 'react';
 import type { SignalstoneState, SignalstoneStore } from '../services/SignalstoneStore';
+import type { ReadReceipt } from '../models/ReadReceipt';
 import { MessageItem } from './MessageItem';
 
 /** How close to the bottom (in pixels) counts as "already near the bottom" for the smart-scroll behavior below. */
@@ -21,6 +22,20 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 	const displayedMessages = state.threadParentId ? state.threadMessages : state.messages;
 	const space = state.spaces.find((item) => item.id === state.selectedSpaceId);
 	const { alwaysScrollToNewest, confirmBeforeDelete, autoLoadAttachments, timeFormat, messageDensity } = state.settings;
+
+	// Group the space's known read receipts by the exact message each person
+	// last saw, so a message can show "Seen by …" only for whoever's receipt
+	// currently points at it — receive-only and live-only, see
+	// docs/WEBEX_CAPABILITIES.md, "Read/unread state".
+	const readByMessageId = new Map<string, ReadReceipt[]>();
+	const spaceReceipts = state.selectedSpaceId ? state.readReceiptsBySpace[state.selectedSpaceId] : undefined;
+	if (spaceReceipts) {
+		for (const receipt of Object.values(spaceReceipts)) {
+			const readers = readByMessageId.get(receipt.lastSeenMessageId) ?? [];
+			readers.push(receipt);
+			readByMessageId.set(receipt.lastSeenMessageId, readers);
+		}
+	}
 
 	useEffect(() => {
 		const shouldScroll = alwaysScrollToNewest || wasNearBottom.current;
@@ -48,7 +63,7 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 		>
 			{threadParent && (
 				<div className="signalstone-thread-parent">
-					<MessageItem message={threadParent} own={threadParent.personId === selfId} store={store} space={space} confirmBeforeDelete={confirmBeforeDelete} autoLoadAttachments={autoLoadAttachments} timeFormat={timeFormat} compact />
+					<MessageItem message={threadParent} own={threadParent.personId === selfId} store={store} space={space} confirmBeforeDelete={confirmBeforeDelete} autoLoadAttachments={autoLoadAttachments} timeFormat={timeFormat} readBy={readByMessageId.get(threadParent.id)} compact />
 				</div>
 			)}
 			{!state.threadParentId && state.nextMessagesUrl && (
@@ -71,6 +86,7 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 						confirmBeforeDelete={confirmBeforeDelete}
 						autoLoadAttachments={autoLoadAttachments}
 						timeFormat={timeFormat}
+						readBy={readByMessageId.get(message.id)}
 						replyCount={state.threadReplyCounts[message.id] ?? 0}
 						onReply={state.threadParentId ? undefined : () => void store.openThread(message.id)}
 						onDelete={() => void store.deleteMessage(message.id)}
@@ -78,7 +94,7 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 					{!state.threadParentId &&
 						(state.threadRepliesByParent[message.id] ?? []).map((reply) => (
 							<div className="signalstone-inline-reply" key={reply.id}>
-								<MessageItem message={reply} own={reply.personId === selfId} store={store} space={space} confirmBeforeDelete={confirmBeforeDelete} autoLoadAttachments={autoLoadAttachments} timeFormat={timeFormat} onDelete={() => void store.deleteMessage(reply.id)} compact />
+								<MessageItem message={reply} own={reply.personId === selfId} store={store} space={space} confirmBeforeDelete={confirmBeforeDelete} autoLoadAttachments={autoLoadAttachments} timeFormat={timeFormat} readBy={readByMessageId.get(reply.id)} onDelete={() => void store.deleteMessage(reply.id)} compact />
 							</div>
 						))}
 				</Fragment>
