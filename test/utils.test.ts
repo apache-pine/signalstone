@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseLinkHeader } from '../src/api/pagination';
 import { parseFilenameFromContentDisposition } from '../src/utils/contentDisposition';
 import { isImageContentType } from '../src/models/Attachment';
-import { resolveSenderName } from '../src/utils/format';
+import { formatDate, resolveSenderName } from '../src/utils/format';
 import type { Space } from '../src/models/Space';
 
 describe('safe parsing helpers', () => {
@@ -29,5 +29,24 @@ describe('resolveSenderName', () => {
 
 	it('falls back to the raw email when no space is known', () => {
 		expect(resolveSenderName({ personEmail: 'anthony.perez@example.com' }, undefined)).toBe('anthony.perez@example.com');
+	});
+});
+
+describe('formatDate time format', () => {
+	const when = '2026-01-01T14:30:00Z';
+
+	it('defaults to "system", leaving hour12 to the locale (matches the original unconditional behavior)', () => {
+		expect(formatDate(when)).toBe(formatDate(when, 'system'));
+	});
+
+	// Deliberately timezone-agnostic: whichever local hour this maps to, a
+	// forced 12-hour clock always carries an AM/PM marker and a forced
+	// 24-hour clock never does — that distinction is what the setting controls.
+	it('forces a 12-hour clock when requested', () => {
+		expect(formatDate(when, '12-hour')).toMatch(/\b(AM|PM)\b/);
+	});
+
+	it('forces a 24-hour clock when requested', () => {
+		expect(formatDate(when, '24-hour')).not.toMatch(/\b(AM|PM)\b/);
 	});
 });

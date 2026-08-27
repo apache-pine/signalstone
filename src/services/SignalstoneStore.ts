@@ -11,11 +11,13 @@ import type { MembershipsApi } from '../api/MembershipsApi';
 import type { Membership } from '../models/Membership';
 import { debugLog } from '../utils/logger';
 import { toWebexMarkdown } from '../utils/format';
+import { DEFAULT_SETTINGS, type SignalstoneSettings } from '../settings/settings';
 
 export interface SignalstoneState {
 	connection: ConnectionState;
 	realtime: RealtimeStatus;
 	realtimeDetail?: string;
+	settings: SignalstoneSettings;
 	spaces: Space[];
 	selectedSpaceId: string | null;
 	messages: WebexMessage[];
@@ -54,8 +56,9 @@ export class SignalstoneStore {
 		private readonly attachmentsApi: Pick<AttachmentsApi, 'fetch'>,
 		private readonly peopleApi: Pick<PeopleApi, 'list'>,
 		private readonly membershipsApi: Pick<MembershipsApi, 'list' | 'add' | 'setModerator' | 'remove'>,
+		settings: SignalstoneSettings = DEFAULT_SETTINGS,
 	) {
-		this.state = { connection, realtime: realtimeProvider.status, realtimeDetail: realtimeProvider.detail, spaces: [], selectedSpaceId: null, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, loading: false };
+		this.state = { connection, realtime: realtimeProvider.status, realtimeDetail: realtimeProvider.detail, settings, spaces: [], selectedSpaceId: null, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, loading: false };
 		this.unsubscribeRealtime = realtimeProvider.onEvent((event) => void this.handleRealtime(event));
 		this.unsubscribeRealtimeStatus = realtimeProvider.onStatusChange((realtime) => this.patch({ realtime, realtimeDetail: realtimeProvider.detail }));
 	}
@@ -63,6 +66,8 @@ export class SignalstoneStore {
 	getSnapshot = (): SignalstoneState => this.state;
 	subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
 	setConnection(connection: ConnectionState): void { this.patch({ connection }); }
+	/** Pushed by the host (main.ts) whenever the user changes a setting, so the already-rendered UI reflects it immediately without needing a full reconnect/remount. */
+	setSettings(settings: SignalstoneSettings): void { this.patch({ settings }); }
 
 	async loadSpaces(): Promise<void> {
 		this.patch({ loading: true, error: undefined });
@@ -83,7 +88,7 @@ export class SignalstoneStore {
 		if (!spaceId) return;
 		this.patch({ loading: true });
 		try {
-			const page = await this.messagesApi.list({ spaceId, max: 50 });
+			const page = await this.messagesApi.list({ spaceId, max: this.state.settings.messagePageSize });
 			if (generation !== this.requestGeneration) return;
 			this.recordThreadReplies(page.items);
 			this.patch({ messages: this.normalize(page.items.filter((message) => !message.parentId)), nextMessagesUrl: page.nextUrl, loading: false });
@@ -252,7 +257,7 @@ export class SignalstoneStore {
 		if (!spaceId) return;
 		try {
 			if (this.state.threadParentId) { const replies = await this.messagesApi.listReplies(spaceId, this.state.threadParentId); this.recordThreadReplies(replies); this.patch({ threadMessages: this.normalize([...this.state.threadMessages, ...replies]) }); }
-			else { const page = await this.messagesApi.list({ spaceId, max: 50 }); this.recordThreadReplies(page.items); this.patch({ messages: this.normalize([...this.state.messages, ...page.items.filter((message) => !message.parentId)]) }); }
+			else { const page = await this.messagesApi.list({ spaceId, max: this.state.settings.messagePageSize }); this.recordThreadReplies(page.items); this.patch({ messages: this.normalize([...this.state.messages, ...page.items.filter((message) => !message.parentId)]) }); }
 		} catch { /* retain memory state offline */ }
 	}
 

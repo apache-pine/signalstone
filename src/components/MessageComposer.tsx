@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { Membership } from '../models/Membership';
 import type { SpaceType } from '../models/Space';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
+import type { SendKeybind } from '../settings/settings';
 import { formatSize } from '../utils/format';
 import { detectActiveMention, filterMentionCandidates, insertMention, mentionMarkupFor, resolveMentions, shouldOfferAllMention, type PendingMention } from '../utils/mentions';
 
@@ -34,6 +35,7 @@ export function MessageComposer({
 	spaceType,
 	selfId,
 	store,
+	sendKeybind,
 }: {
 	draft: string;
 	onDraftChange: (value: string) => void;
@@ -46,7 +48,10 @@ export function MessageComposer({
 	spaceType: SpaceType;
 	selfId: string;
 	store: SignalstoneStore;
+	/** Which key sends the message; the other always inserts a newline. Defaults to the original Enter-to-send behavior. */
+	sendKeybind?: SendKeybind;
 }) {
+	const sendKey = sendKeybind === 'shift-enter-to-send' ? 'shift-enter' : 'enter';
 	const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
 	const [highlighted, setHighlighted] = useState(0);
 	const [members, setMembers] = useState<Membership[]>([]);
@@ -173,7 +178,8 @@ export function MessageComposer({
 								return;
 							}
 						}
-						if (event.key === 'Enter' && !event.shiftKey) {
+						const sendPressed = sendKey === 'enter' ? event.key === 'Enter' && !event.shiftKey : event.key === 'Enter' && event.shiftKey;
+						if (sendPressed) {
 							event.preventDefault();
 							send();
 						}

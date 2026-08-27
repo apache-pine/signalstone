@@ -29,33 +29,39 @@ export class PollingFallback implements RealtimeProvider {
 	private statusListeners = new Set<(status: RealtimeStatus) => void>();
 	private activeTimer: number | undefined;
 	private listTimer: number | undefined;
+	private activeIntervalMs: number;
+	private listIntervalMs: number;
 
-	constructor(private readonly options: PollingFallbackOptions = {}) {}
+	constructor(private readonly options: PollingFallbackOptions = {}) {
+		this.activeIntervalMs = options.activeConversationIntervalMs ?? DEFAULT_ACTIVE_INTERVAL_MS;
+		this.listIntervalMs = options.spaceListIntervalMs ?? DEFAULT_LIST_INTERVAL_MS;
+	}
 
 	async start(): Promise<void> {
 		if (this.status === 'degraded' || this.status === 'live') return;
-
-		const setTimer = this.options.setInterval ?? ((cb, ms) => window.setInterval(cb, ms));
-		this.listTimer = setTimer(() => this.emit({ type: 'refresh-space-list' }), this.options.spaceListIntervalMs ?? DEFAULT_LIST_INTERVAL_MS);
-		this.options.registerInterval?.(this.listTimer);
-
-		this.activeTimer = setTimer(() => {
-			if (this.activeView) {
-				this.emit({ type: 'poll-tick', view: this.activeView });
-			}
-		}, this.options.activeConversationIntervalMs ?? DEFAULT_ACTIVE_INTERVAL_MS);
-		this.options.registerInterval?.(this.activeTimer);
-
+		this.scheduleTimers();
 		this.setStatus('degraded');
 	}
 
 	async stop(): Promise<void> {
-		const clearTimer = this.options.clearInterval ?? ((id: number) => window.clearInterval(id));
-		if (this.activeTimer !== undefined) clearTimer(this.activeTimer);
-		if (this.listTimer !== undefined) clearTimer(this.listTimer);
-		this.activeTimer = undefined;
-		this.listTimer = undefined;
+		this.clearTimers();
 		this.setStatus('stopped');
+	}
+
+	/**
+	 * Applies a new polling cadence (e.g. the user changed the "Realtime
+	 * polling frequency" setting). If currently running, the timers are
+	 * restarted immediately so the new cadence takes effect right away rather
+	 * than after the next reconnect; if not running, the new cadence simply
+	 * takes effect the next time `start()` is called.
+	 */
+	setIntervals(activeConversationIntervalMs: number, spaceListIntervalMs: number): void {
+		this.activeIntervalMs = activeConversationIntervalMs;
+		this.listIntervalMs = spaceListIntervalMs;
+		if (this.activeTimer !== undefined || this.listTimer !== undefined) {
+			this.clearTimers();
+			this.scheduleTimers();
+		}
 	}
 
 	setActiveView(view: ActiveView | null): void {
@@ -70,6 +76,27 @@ export class PollingFallback implements RealtimeProvider {
 	onStatusChange(listener: (status: RealtimeStatus) => void): () => void {
 		this.statusListeners.add(listener);
 		return () => this.statusListeners.delete(listener);
+	}
+
+	private scheduleTimers(): void {
+		const setTimer = this.options.setInterval ?? ((cb, ms) => window.setInterval(cb, ms));
+		this.listTimer = setTimer(() => this.emit({ type: 'refresh-space-list' }), this.listIntervalMs);
+		this.options.registerInterval?.(this.listTimer);
+
+		this.activeTimer = setTimer(() => {
+			if (this.activeView) {
+				this.emit({ type: 'poll-tick', view: this.activeView });
+			}
+		}, this.activeIntervalMs);
+		this.options.registerInterval?.(this.activeTimer);
+	}
+
+	private clearTimers(): void {
+		const clearTimer = this.options.clearInterval ?? ((id: number) => window.clearInterval(id));
+		if (this.activeTimer !== undefined) clearTimer(this.activeTimer);
+		if (this.listTimer !== undefined) clearTimer(this.listTimer);
+		this.activeTimer = undefined;
+		this.listTimer = undefined;
 	}
 
 	private emit(event: RealtimeEvent): void {

@@ -1,9 +1,17 @@
 import type { Space } from '../models/Space';
+import type { TimeFormat } from '../settings/settings';
 
-export function formatDate(value: string): string {
+/**
+ * 'system' (the default) omits `hour12` entirely so the browser/OS locale
+ * decides, exactly matching the original unconditional behavior. '12-hour'/
+ * '24-hour' let a user override that when they want a consistent clock
+ * regardless of locale.
+ */
+export function formatDate(value: string, timeFormat: TimeFormat = 'system'): string {
 	const date = new Date(value);
 	if (Number.isNaN(date.valueOf())) return '';
-	return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+	const hour12 = timeFormat === 'system' ? undefined : timeFormat === '12-hour';
+	return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12 });
 }
 
 export function formatSize(bytes: number): string {
