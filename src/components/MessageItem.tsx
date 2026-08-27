@@ -3,7 +3,7 @@ import type { WebexMessage } from '../models/Message';
 import type { Space } from '../models/Space';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
 import { formatDate, resolveSenderName } from '../utils/format';
-import { renderText } from '../utils/renderText';
+import { renderWebexMarkdown } from '../utils/webexMarkdown';
 import { AttachmentPreview } from './AttachmentPreview';
 
 export function MessageItem({
@@ -58,7 +58,7 @@ export function MessageItem({
 					</div>
 				</div>
 			) : (
-				<div className="signalstone-message-text">{renderText(message.markdown || message.text || '')}</div>
+				<div className="signalstone-message-text">{renderWebexMarkdown(message.markdown || message.text || '')}</div>
 			)}
 			{message.files?.map((url) => <AttachmentPreview url={url} store={store} key={url} />)}
 			{message.isEdited && <small>(edited)</small>}

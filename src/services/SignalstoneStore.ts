@@ -10,6 +10,7 @@ import type { Person } from '../models/Person';
 import type { MembershipsApi } from '../api/MembershipsApi';
 import type { Membership } from '../models/Membership';
 import { debugLog } from '../utils/logger';
+import { toWebexMarkdown } from '../utils/format';
 
 export interface SignalstoneState {
 	connection: ConnectionState;
@@ -104,7 +105,7 @@ export class SignalstoneStore {
 		if (!spaceId || (!text.trim() && !file)) return;
 		const outgoing = file ? { filename: file.name, contentType: file.type || 'application/octet-stream', data: await file.arrayBuffer() } : undefined;
 		const parentId = this.state.threadParentId ?? undefined;
-		const message = await this.messagesApi.create({ spaceId, parentId, text: text.trim() || undefined, markdown: text.trim() || undefined, file: outgoing });
+		const message = await this.messagesApi.create({ spaceId, parentId, text: text.trim() || undefined, markdown: text.trim() ? toWebexMarkdown(text.trim()) : undefined, file: outgoing });
 		if (parentId) { this.recordThreadReplies([message]); this.patch({ threadMessages: this.normalize([...this.state.threadMessages, message]) }); }
 		else this.patch({ messages: this.normalize([...this.state.messages, message]) });
 	}
@@ -127,7 +128,7 @@ export class SignalstoneStore {
 	async editMessage(messageId: string, text: string): Promise<void> {
 		const spaceId = this.state.selectedSpaceId;
 		if (!spaceId || !text.trim()) return;
-		const updated = await this.messagesApi.update(messageId, { spaceId, text: text.trim(), markdown: text.trim() });
+		const updated = await this.messagesApi.update(messageId, { spaceId, text: text.trim(), markdown: toWebexMarkdown(text.trim()) });
 		this.patch({
 			messages: this.state.messages.map((message) => message.id === messageId ? updated : message),
 			threadMessages: this.state.threadMessages.map((message) => message.id === messageId ? updated : message),
@@ -150,7 +151,7 @@ export class SignalstoneStore {
 	async startDirectMessage(recipient: Pick<Person, 'id' | 'displayName'> | { email: string }, text: string): Promise<void> {
 		if (!text.trim()) return;
 		const target = 'id' in recipient ? { toPersonId: recipient.id } : { toPersonEmail: recipient.email.trim() };
-		const message = await this.messagesApi.create({ ...target, text: text.trim(), markdown: text.trim() });
+		const message = await this.messagesApi.create({ ...target, text: text.trim(), markdown: toWebexMarkdown(text.trim()) });
 		await this.loadSpaces();
 		if (!this.state.spaces.some((space) => space.id === message.spaceId)) {
 			const title = 'id' in recipient ? recipient.displayName : recipient.email;

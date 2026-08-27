@@ -14,7 +14,7 @@ Signalstone is an independent, lightweight Webex messaging client for an Obsidia
 - Official Webex Browser SDK events with automatic conservative polling fallback
 - Responsive theme-native sidebar, offline states, and in-memory drafts
 
-New direct messages are supported. Group spaces have a member panel (list, add by email, promote/demote moderator, remove). Optional notifications (off / direct messages only / all messages, configurable in settings) surface top-level messages from someone else in a space you don't currently have open — never your own messages, never the conversation you're already looking at, and no sound. Space creation and mention autocomplete remain future work. See [the capability record](docs/WEBEX_CAPABILITIES.md). GIPHY is intentionally excluded; ordinary GIF files upload and display normally.
+New direct messages are supported. Group spaces have a member panel (list, add by email, promote/demote moderator, remove) and `@mention` autocomplete (plus `@all`) in the composer. Incoming Markdown — bold, italic, links, lists, blockquotes, code — renders as real formatting, not raw syntax; outgoing text is sent through Webex's `markdown` field. Optional notifications (off / direct messages only / all messages, configurable in settings) surface top-level messages from someone else in a space you don't currently have open — never your own messages, never the conversation you're already looking at, and no sound. Space creation remains future work. See [the capability record](docs/WEBEX_CAPABILITIES.md). GIPHY is intentionally excluded; ordinary GIF files upload and display normally.
 
 ## Install and connect
 

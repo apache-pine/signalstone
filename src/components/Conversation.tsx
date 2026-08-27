@@ -25,12 +25,13 @@ export function Conversation({
 	const [sending, setSending] = useState(false);
 	const [showMembers, setShowMembers] = useState(false);
 	const isThread = state.threadParentId !== null;
+	const spaceId = state.selectedSpaceId ?? '';
 
-	const send = async () => {
-		if (sending || (!draft.trim() && !file)) return;
+	const send = async (text: string) => {
+		if (sending || (!text.trim() && !file)) return;
 		setSending(true);
 		try {
-			await store.send(draft, file);
+			await store.send(text, file);
 			setDraft('');
 			setFile(undefined);
 		} finally {
@@ -52,7 +53,19 @@ export function Conversation({
 				onOpenMembers={!isThread && spaceType === 'group' ? () => setShowMembers(true) : undefined}
 			/>
 			<MessageList state={state} store={store} selfId={selfId} />
-			<MessageComposer draft={draft} onDraftChange={setDraft} file={file} onFileChange={setFile} sending={sending} onSend={() => void send()} isThread={isThread} />
+			<MessageComposer
+				draft={draft}
+				onDraftChange={setDraft}
+				file={file}
+				onFileChange={setFile}
+				sending={sending}
+				onSend={(text) => void send(text)}
+				isThread={isThread}
+				spaceId={spaceId}
+				spaceType={spaceType}
+				selfId={selfId}
+				store={store}
+			/>
 		</section>
 	);
 }

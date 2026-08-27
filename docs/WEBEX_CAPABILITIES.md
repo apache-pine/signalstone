@@ -2,20 +2,86 @@
 
 | Feature | Public capability | Implementation |
 |---|---|---|
-| Text/limited Markdown | [Create Message](https://developer.webex.com/docs/api/v1/messages/create-a-message) | Implemented |
+| Markdown | [Create Message](https://developer.webex.com/docs/api/v1/messages/create-a-message), [documented syntax](https://developer.webex.com/formatting-messages.html) | Outgoing: sent via the `markdown` field. Incoming: rendered as React elements (never HTML) for bold, italic, links, ordered/unordered lists with nesting, blockquotes, inline code, fenced code blocks, and mentions — see `src/utils/webexMarkdown.tsx` |
 | Spaces/direct spaces | [Rooms API](https://developer.webex.com/docs/api/v1/rooms) | List/open implemented |
 | Paginated history | [List Messages](https://developer.webex.com/docs/api/v1/messages/list-messages) | Implemented |
 | File/GIF upload | Supported; one file per request | Upload and authenticated received preview/save implemented |
 | Threads | Supported via `parentId` | Reply, focused thread, and inline reply context implemented |
 | Edit/delete own message | Supported | Implemented for the authenticated user's messages |
-| Mentions | Supported with documented markup | API pass-through; autocomplete pending |
+| Mentions | Sending: documented markup (`<@personEmail:...\|Name>`, `<@personId:...\|Name>`, `<@all>`). Rendering: `<spark-mention>` — Webex's own tag, undocumented but confirmed live, see below | Incoming: renders both forms as a styled `@Name`/`@all` span. Outgoing: type `@` in a group space's composer for autocomplete against loaded members, plus `@all`; resolves to the documented send-time markup. Not offered in direct spaces (no one else to mention) or the edit-in-place box |
 | Membership management | [Memberships API](https://developer.webex.com/docs/api/v1/memberships) | List, add by email, moderator toggle, and remove implemented for group spaces; space creation/rename UI still pending |
 | Realtime | [Browser SDK](https://developer.webex.com/messaging/docs/sdks/browser) | Confirmed reaching `Live`; four issues found and fixed along the way (a crash, a CORS block, a room-id encoding mismatch, and a missing plugin that silently broke every event envelope) — see below |
 | Notifications | Obsidian `Notice` API | Off / direct messages only / all messages, for top-level messages from someone else in a space that isn't open; no sound |
 | Read state | SDK membership last-seen behavior exists | Not wired; no canonical-unread claim |
-| Emoji reactions | Not exposed in reviewed ordinary REST API | Not implemented |
+| Emoji reactions | Private/internal only — see below | Intentionally not implemented |
 | Adaptive cards | Public APIs exist | Safe fallback only |
 | GIPHY | Intentionally excluded | Not implemented |
+
+## Why not render with Obsidian's own MarkdownRenderer?
+
+Obsidian ships a capable Markdown renderer (`MarkdownRenderer.render()`),
+and it was considered for incoming messages instead of a hand-written one.
+Rejected for two concrete reasons, not just preference:
+
+- **Feature mismatch.** Obsidian's dialect includes wikilinks, embeds,
+  callouts, and tags that aren't part of Webex Markdown. A message that
+  happens to contain `[[...]]` or `#topic` text (meant literally, not as
+  vault syntax) would render as if it were a vault reference — wrong, and
+  confusing.
+- **Embed risk.** Obsidian's embeds (`![[note]]`) can pull in and display
+  content from the user's own vault. Feeding that renderer remote,
+  untrusted Webex message text means a message could reference — and
+  Obsidian would then render — vault content the sender never sent and has
+  no business seeing, which is exactly the kind of thing "remote message
+  content is untrusted input" is meant to prevent.
+
+`src/utils/webexMarkdown.tsx` renders the same documented subset instead,
+as plain React elements assembled from parsed string tokens — never an
+HTML string, never `dangerouslySetInnerHTML`, and no code path that can
+reference the vault. Covered by `test/webex-markdown.test.tsx`, including a
+regression test asserting that literal `<script>`/`<img onerror>` text in a
+message stays inert text rather than becoming a DOM element.
+
+## Mentions render differently than they're sent — confirmed live, not documented
+
+The documented mention syntax (`<@personEmail:...|Name>` etc.) is what you
+*send* through the `markdown` field — that part matches the docs exactly.
+What comes back is different: live testing (sending a mention to a real
+space and inspecting the response Signalstone actually receives) showed
+Webex rewrites a processed mention into its own tag,
+`<spark-mention data-object-type="person" data-object-id="...">Name</spark-mention>`
+— including in the response to Signalstone's own send call, not just on
+messages from other clients. This tag isn't in the public Markdown
+formatting docs; it's what Webex's own web/desktop client evidently renders
+directly, and the only way to know about it was to look at a real response.
+
+`webexMarkdown.tsx` recognizes both forms: the documented `<@...>` syntax
+(kept, since it's the correct thing to send, and may still appear as
+literal text before Webex has processed a message) and `<spark-mention>`
+(the only form actually observed coming back from a live send). Both
+extract just the inner display name and render it as a styled span — the
+tag's attributes (`data-object-type`, `data-object-id`) are skipped over,
+never read as anything meaningful, and the raw tag is never treated as
+HTML. Covered by a regression test in `test/webex-markdown.test.tsx` using
+the exact tag observed live.
+
+## Emoji reactions: confirmed private-only, not implemented
+
+Checked directly against the installed SDK source, not just documentation
+search: `@webex/internal-plugin-conversation` has real reaction handling
+(`sendReaction`/`deleteReaction`, sending an activity with
+`objectType: 'reaction2'` to the conversation service), which is what the
+native Webex clients use. The public `@webex/plugin-messages` package —
+the one built on the documented REST API — has no reaction-related code at
+all, and the public [Messages API reference](https://developer.webex.com/docs/api/v1/messages)
+has no reaction endpoint or field. Cisco's own developer community has
+confirmed the same conclusion.
+
+This is the same `internal-plugin-*` territory already avoided for
+realtime, for the same reason: it's not `webexapis.com`, not a documented
+integration surface, and reverse-engineering it would mean guessing at an
+undocumented, private protocol rather than using a supported API. Not
+implemented, and not planned unless Cisco documents a public endpoint.
 
 ## Realtime: four issues found and fixed; confirmed reaching Live
 
