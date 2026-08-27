@@ -5,6 +5,7 @@ import { ConversationHeader } from './ConversationHeader';
 import { MessageList } from './MessageList';
 import { MessageComposer } from './MessageComposer';
 import { MemberList } from './MemberList';
+import { presenceInfo } from '../utils/presence';
 
 /** The open conversation (or, when a thread is focused, that thread) with its message list and composer. */
 export function Conversation({
@@ -26,6 +27,9 @@ export function Conversation({
 	const [showMembers, setShowMembers] = useState(false);
 	const isThread = state.threadParentId !== null;
 	const spaceId = state.selectedSpaceId ?? '';
+	const directoryInfo = spaceType === 'direct' ? state.directoryInfoBySpaceId[spaceId] : undefined;
+	const avatarUrl = state.settings.showAvatarsInConversations ? directoryInfo?.avatar : undefined;
+	const presence = state.settings.showPresenceInConversations ? presenceInfo(directoryInfo?.status) : undefined;
 
 	const send = async (text: string) => {
 		if (sending || (!text.trim() && !file)) return;
@@ -52,6 +56,8 @@ export function Conversation({
 				onBack={() => (isThread ? store.closeThread() : void store.selectSpace(null))}
 				onOpenMembers={!isThread && spaceType === 'group' ? () => setShowMembers(true) : undefined}
 				onRename={!isThread && spaceType === 'group' ? (nextTitle) => void store.renameSpace(spaceId, nextTitle) : undefined}
+				avatarUrl={avatarUrl}
+				presence={presence}
 			/>
 			<MessageList state={state} store={store} selfId={selfId} />
 			<MessageComposer

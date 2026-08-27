@@ -3,6 +3,7 @@ import type { Person } from '../models/Person';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
 import { errorMessage } from '../utils/format';
 import { isValidEmail } from '../utils/email';
+import { presenceInfo } from '../utils/presence';
 
 interface PendingMember {
 	email: string;
@@ -91,12 +92,21 @@ export function NewSpace({ store, onClose }: { store: SignalstoneStore; onClose:
 				</button>
 				{error && <p className="signalstone-form-error">{error}</p>}
 				<div className="signalstone-people-results">
-					{results.map((person) => (
-						<button key={person.id} onClick={() => addMember({ email: person.emails[0] ?? '', label: person.displayName })}>
-							<strong>{person.displayName}</strong>
-							<small>{person.emails[0] || 'Webex user'}</small>
-						</button>
-					))}
+					{results.map((person) => {
+						const presence = presenceInfo(person.status);
+						return (
+							<button key={person.id} onClick={() => addMember({ email: person.emails[0] ?? '', label: person.displayName })}>
+								{person.avatar && <img className="signalstone-avatar" src={person.avatar} alt="" loading="lazy" />}
+								<div>
+									<div className="signalstone-person-name">
+										<strong>{person.displayName}</strong>
+										{presence && <span className={`signalstone-presence is-${presence.category}`} title={presence.label} aria-label={presence.label} />}
+									</div>
+									<small>{person.emails[0] || 'Webex user'}</small>
+								</div>
+							</button>
+						);
+					})}
 					{exactEmail && (
 						<button onClick={() => addMember({ email: query.trim(), label: query.trim() })}>
 							<strong>Add {query.trim()}</strong>

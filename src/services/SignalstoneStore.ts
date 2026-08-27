@@ -6,13 +6,19 @@ import type { Space } from '../models/Space';
 import type { WebexMessage } from '../models/Message';
 import type { AttachmentsApi, FetchedFileContent } from '../api/AttachmentsApi';
 import type { PeopleApi } from '../api/PeopleApi';
-import type { Person } from '../models/Person';
+import type { Person, PersonStatus } from '../models/Person';
 import type { MembershipsApi } from '../api/MembershipsApi';
 import type { Membership } from '../models/Membership';
 import type { ReadReceipt } from '../models/ReadReceipt';
 import { debugLog } from '../utils/logger';
 import { toWebexMarkdown } from '../utils/format';
 import { DEFAULT_SETTINGS, type SignalstoneSettings } from '../settings/settings';
+
+/** Avatar/presence for the other person in a direct space, keyed by spaceId. See SignalstoneStore.refreshDirectoryInfo. */
+export interface DirectoryInfo {
+	avatar?: string;
+	status?: PersonStatus;
+}
 
 export interface SignalstoneState {
 	connection: ConnectionState;
@@ -28,6 +34,8 @@ export interface SignalstoneState {
 	threadRepliesByParent: Record<string, WebexMessage[]>;
 	/** Other members' read receipts, by space then by their personId. Receive-only and live-only — see docs/WEBEX_CAPABILITIES.md, "Read/unread state". */
 	readReceiptsBySpace: Record<string, Record<string, ReadReceipt>>;
+	/** Avatar/presence for direct spaces, by spaceId. Only populated while at least one of the four avatar/presence settings is on. */
+	directoryInfoBySpaceId: Record<string, DirectoryInfo>;
 	nextMessagesUrl?: string;
 	loading: boolean;
 	error?: string;
@@ -50,6 +58,8 @@ export class SignalstoneStore {
 	private unsubscribeRealtimeStatus?: () => void;
 	/** Previous lastActivity per space, used to detect background activity for notifications. Undefined until after the first load. */
 	private lastKnownActivity?: Map<string, string>;
+	/** Resolved once per direct space (never changes after) and reused across every refreshDirectoryInfo() cycle, so only unresolved spaces cost an extra membership lookup. */
+	private readonly otherPersonIdBySpaceId = new Map<string, string>();
 
 	constructor(
 		connection: ConnectionState,
@@ -61,7 +71,7 @@ export class SignalstoneStore {
 		private readonly membershipsApi: Pick<MembershipsApi, 'list' | 'add' | 'setModerator' | 'remove'>,
 		settings: SignalstoneSettings = DEFAULT_SETTINGS,
 	) {
-		this.state = { connection, realtime: realtimeProvider.status, realtimeDetail: realtimeProvider.detail, settings, spaces: [], selectedSpaceId: null, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, readReceiptsBySpace: {}, loading: false };
+		this.state = { connection, realtime: realtimeProvider.status, realtimeDetail: realtimeProvider.detail, settings, spaces: [], selectedSpaceId: null, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, readReceiptsBySpace: {}, directoryInfoBySpaceId: {}, loading: false };
 		this.unsubscribeRealtime = realtimeProvider.onEvent((event) => void this.handleRealtime(event));
 		this.unsubscribeRealtimeStatus = realtimeProvider.onStatusChange((realtime) => this.patch({ realtime, realtimeDetail: realtimeProvider.detail }));
 	}
@@ -69,8 +79,18 @@ export class SignalstoneStore {
 	getSnapshot = (): SignalstoneState => this.state;
 	subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
 	setConnection(connection: ConnectionState): void { this.patch({ connection }); }
-	/** Pushed by the host (main.ts) whenever the user changes a setting, so the already-rendered UI reflects it immediately without needing a full reconnect/remount. */
-	setSettings(settings: SignalstoneSettings): void { this.patch({ settings }); }
+	/**
+	 * Pushed by the host (main.ts) whenever the user changes a setting, so the
+	 * already-rendered UI reflects it immediately without needing a full
+	 * reconnect/remount. If this turns on the first of the four avatar/
+	 * presence settings, kicks off an immediate refresh rather than waiting
+	 * up to a full space-list-poll interval for data to appear.
+	 */
+	setSettings(settings: SignalstoneSettings): void {
+		const wasEnabled = this.wantsDirectoryInfo(this.state.settings);
+		this.patch({ settings });
+		if (!wasEnabled && this.wantsDirectoryInfo(settings)) void this.refreshDirectoryInfo();
+	}
 
 	async loadSpaces(): Promise<void> {
 		this.patch({ loading: true, error: undefined });
@@ -80,6 +100,11 @@ export class SignalstoneStore {
 			if (this.notify) await this.notifyBackgroundActivity(sorted);
 			this.lastKnownActivity = new Map(sorted.map((space) => [space.id, space.lastActivity]));
 			this.patch({ spaces: sorted, loading: false });
+			// Piggybacks on this same refresh cycle (initial load, every
+			// refresh-space-list event, and a manual refresh click) rather than
+			// running its own timer -- see docs/WEBEX_CAPABILITIES.md, "Avatars
+			// and presence".
+			void this.refreshDirectoryInfo();
 		} catch (error) { this.patch({ loading: false, error: this.message(error) }); }
 	}
 
@@ -344,6 +369,52 @@ export class SignalstoneStore {
 		if (existing && Date.parse(event.seenAt) <= Date.parse(existing.seenAt)) return;
 		const receipt: ReadReceipt = { personId: event.personId, personDisplayName: event.personDisplayName, personEmail: event.personEmail, lastSeenMessageId: event.lastSeenMessageId, seenAt: event.seenAt };
 		this.patch({ readReceiptsBySpace: { ...this.state.readReceiptsBySpace, [event.spaceId]: { ...bySpace, [event.personId]: receipt } } });
+	}
+
+	private wantsDirectoryInfo(settings: SignalstoneSettings): boolean {
+		return settings.showAvatarsInRecents || settings.showPresenceInRecents || settings.showAvatarsInConversations || settings.showPresenceInConversations;
+	}
+
+	/**
+	 * Refreshes avatar/presence for every loaded direct space, best-effort.
+	 * No-op entirely unless at least one of the four avatar/presence settings
+	 * is on — this never runs, and never costs a single extra request,
+	 * otherwise. Two steps: resolve each not-yet-known direct space's other
+	 * member (once, cached in otherPersonIdBySpaceId for the store's
+	 * lifetime — a direct space's two participants never change), then
+	 * batch-fetch avatar/status for every known person id in one People API
+	 * call. See docs/WEBEX_CAPABILITIES.md, "Avatars and presence".
+	 */
+	private async refreshDirectoryInfo(): Promise<void> {
+		if (!this.wantsDirectoryInfo(this.state.settings)) return;
+
+		const selfId = this.state.connection.status === 'connected' ? this.state.connection.person.id : undefined;
+		const directSpaces = this.state.spaces.filter((space) => space.type === 'direct');
+		const unresolved = directSpaces.filter((space) => !this.otherPersonIdBySpaceId.has(space.id));
+
+		await Promise.all(
+			unresolved.map(async (space) => {
+				try {
+					const page = await this.membershipsApi.list({ spaceId: space.id, max: 2 });
+					const other = page.items.find((member) => member.personId !== selfId);
+					if (other) this.otherPersonIdBySpaceId.set(space.id, other.personId);
+				} catch (error) { debugLog('store', 'Failed to resolve the other member of a direct space', { spaceId: space.id, error: this.message(error) }); }
+			}),
+		);
+
+		const personIds = [...new Set(this.otherPersonIdBySpaceId.values())];
+		if (personIds.length === 0) return;
+
+		try {
+			const people = await this.peopleApi.list({ ids: personIds });
+			const byPersonId = new Map(people.map((person) => [person.id, person]));
+			const directoryInfoBySpaceId: Record<string, DirectoryInfo> = {};
+			for (const [spaceId, personId] of this.otherPersonIdBySpaceId) {
+				const person = byPersonId.get(personId);
+				if (person) directoryInfoBySpaceId[spaceId] = { avatar: person.avatar, status: person.status };
+			}
+			this.patch({ directoryInfoBySpaceId });
+		} catch (error) { debugLog('store', 'Failed to batch-fetch avatar/presence', { personCount: personIds.length, error: this.message(error) }); }
 	}
 
 	private normalize(messages: WebexMessage[]): WebexMessage[] {
