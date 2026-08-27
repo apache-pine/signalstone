@@ -20,6 +20,9 @@ export function MemberList({ spaceId, selfId, store, onClose }: { spaceId: strin
 	const [addError, setAddError] = useState('');
 	const [busyMembershipId, setBusyMembershipId] = useState<string>();
 	const [confirmingRemoveId, setConfirmingRemoveId] = useState<string>();
+	const [confirmingLeave, setConfirmingLeave] = useState(false);
+	const [leaving, setLeaving] = useState(false);
+	const [leaveError, setLeaveError] = useState('');
 
 	const load = async () => {
 		setStatus('loading');
@@ -64,6 +67,21 @@ export function MemberList({ spaceId, selfId, store, onClose }: { spaceId: strin
 			setError(errorMessage(reason, 'Unable to update moderator status.'));
 		} finally {
 			setBusyMembershipId(undefined);
+		}
+	};
+
+	const leaveSpace = async () => {
+		setLeaving(true);
+		setLeaveError('');
+		try {
+			await store.leaveSpace(spaceId);
+			// No further navigation needed here: leaving clears selectedSpaceId
+			// in the store, and the router (SignalstoneApp) reacts to that on its
+			// own by returning to the conversation list.
+		} catch (reason) {
+			setLeaveError(errorMessage(reason, 'Unable to leave this space.'));
+			setConfirmingLeave(false);
+			setLeaving(false);
 		}
 	};
 
@@ -159,6 +177,23 @@ export function MemberList({ spaceId, selfId, store, onClose }: { spaceId: strin
 					</ul>
 				)}
 				{error && status !== 'error' && <p className="signalstone-form-error">{error}</p>}
+				<div className="signalstone-leave-space">
+					{leaveError && <p className="signalstone-form-error">{leaveError}</p>}
+					{confirmingLeave ? (
+						<>
+							<button disabled={leaving} onClick={() => setConfirmingLeave(false)}>
+								Cancel
+							</button>
+							<button className="mod-warning" disabled={leaving} onClick={() => void leaveSpace()}>
+								{leaving ? 'Leaving…' : 'Confirm leave'}
+							</button>
+						</>
+					) : (
+						<button className="mod-warning" onClick={() => setConfirmingLeave(true)}>
+							Leave this space
+						</button>
+					)}
+				</div>
 			</div>
 		</section>
 	);

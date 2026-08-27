@@ -51,6 +51,7 @@ export function Conversation({
 				isThread={isThread}
 				onBack={() => (isThread ? store.closeThread() : void store.selectSpace(null))}
 				onOpenMembers={!isThread && spaceType === 'group' ? () => setShowMembers(true) : undefined}
+				onRename={!isThread && spaceType === 'group' ? (nextTitle) => void store.renameSpace(spaceId, nextTitle) : undefined}
 			/>
 			<MessageList state={state} store={store} selfId={selfId} />
 			<MessageComposer

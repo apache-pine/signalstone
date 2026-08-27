@@ -3,7 +3,7 @@ import type { SignalstoneState, SignalstoneStore } from '../services/Signalstone
 import { formatDate, realtimeLabel } from '../utils/format';
 
 /** The "Recent" screen: connectivity status, local filtering, and the combined list of direct/group spaces. */
-export function ConversationList({ state, store, onNewMessage }: { state: SignalstoneState; store: SignalstoneStore; onNewMessage: () => void }) {
+export function ConversationList({ state, store, onNewMessage, onNewSpace }: { state: SignalstoneState; store: SignalstoneStore; onNewMessage: () => void; onNewSpace: () => void }) {
 	const [filter, setFilter] = useState('');
 	const filtered = state.spaces.filter((space) => (space.title || 'Direct message').toLowerCase().includes(filter.toLowerCase()));
 	// state.spaces is already sorted by most-recent activity (see SignalstoneStore.loadSpaces);
@@ -23,6 +23,9 @@ export function ConversationList({ state, store, onNewMessage }: { state: Signal
 				<div className="signalstone-header-actions">
 					<button onClick={onNewMessage} aria-label="Start a new message">
 						＋
+					</button>
+					<button onClick={onNewSpace} aria-label="Create a new space">
+						👥
 					</button>
 					<button onClick={() => void store.loadSpaces()} aria-label="Refresh conversations">
 						↻
