@@ -34,6 +34,16 @@ const context = await esbuild.context({
 	],
 	format: 'cjs',
 	target: 'es2021',
+	// Redirects @webex/http-core's browser transport away from a bare `new
+	// XMLHttpRequest()` (fully subject to the Obsidian renderer's CORS
+	// enforcement) to Signalstone's requestUrl-backed shim (which is not,
+	// since requestUrl routes through Electron's main process). Scoped to
+	// this one dependency's bundled code only — does not touch Obsidian's
+	// real `window.XMLHttpRequest`. See src/realtime/RequestUrlXhrShim.ts
+	// and docs/WEBEX_CAPABILITIES.md for the full explanation.
+	define: {
+		XMLHttpRequest: 'window.__signalstoneWebexXhrShim',
+	},
 	logLevel: 'info',
 	sourcemap: prod ? false : 'inline',
 	treeShaking: true,

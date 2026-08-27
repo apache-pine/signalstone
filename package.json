@@ -37,6 +37,13 @@
 		"vitest": "^3.0.5"
 	},
 	"dependencies": {
+		"@babel/runtime-corejs2": "7.29.2",
+		"@webex/plugin-logger": "3.7.0",
+		"@webex/plugin-memberships": "3.7.0",
+		"@webex/plugin-messages": "3.7.0",
+		"@webex/plugin-people": "3.7.0",
+		"@webex/plugin-rooms": "3.7.0",
+		"@webex/webex-core": "3.7.0",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0"
 	}
