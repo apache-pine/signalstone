@@ -4,6 +4,7 @@ import type { RealtimeEvent, RealtimeProvider, RealtimeStatus } from '../src/rea
 import type { Space } from '../src/models/Space';
 import type { WebexMessage } from '../src/models/Message';
 import type { Membership } from '../src/models/Membership';
+import { DEFAULT_SETTINGS } from '../src/settings/settings';
 
 const space = (title: string): Space => ({ id: 'room', title, type: 'group', isLocked: false, lastActivity: '2026-01-01T00:00:00Z', creatorId: 'me', created: '2026-01-01T00:00:00Z' });
 const message = (overrides: Partial<WebexMessage> = {}): WebexMessage => ({ id: 'message', spaceId: 'room', spaceType: 'group', personId: 'me', personEmail: 'me@example.com', text: 'Hello', created: '2026-01-01T00:00:00Z', isEdited: false, ...overrides });
@@ -20,7 +21,7 @@ class FakeRealtime implements RealtimeProvider {
 
 const flushMicrotasks = () => new Promise((resolve) => window.setTimeout(resolve, 0));
 
-function createStore(list: () => Promise<{ items: Space[]; nextUrl?: string }>) {
+function createStore(list: () => Promise<{ items: Space[]; nextUrl?: string }>, settings = DEFAULT_SETTINGS) {
 	const messages = { list: vi.fn(async (): Promise<{ items: WebexMessage[]; nextUrl?: string }> => ({ items: [], nextUrl: undefined })), listReplies: vi.fn(async (): Promise<WebexMessage[]> => []), get: vi.fn(async () => message()), create: vi.fn(async (input: { parentId?: string }) => message({ parentId: input.parentId })), update: vi.fn(async (_id: string, input: { text?: string }) => message({ text: input.text, isEdited: true })), delete: vi.fn(async () => undefined) };
 	const memberships = { list: vi.fn(async (): Promise<{ items: Membership[]; nextUrl?: string }> => ({ items: [membership()], nextUrl: undefined })), add: vi.fn(async (spaceId: string, personEmail: string) => membership({ id: 'new', personEmail, spaceId })), setModerator: vi.fn(async (id: string, isModerator: boolean) => membership({ id, isModerator })), remove: vi.fn(async () => undefined) };
 	const realtime = new FakeRealtime();
@@ -30,6 +31,7 @@ function createStore(list: () => Promise<{ items: Space[]; nextUrl?: string }>) 
 		{ fetch: vi.fn() },
 		{ list: vi.fn(async () => []) },
 		memberships,
+		settings,
 	);
 	return { store, messages, memberships, realtime };
 }
@@ -139,5 +141,20 @@ describe('SignalstoneStore', () => {
 
 		expect(store.getSnapshot().messages.map((item) => item.id)).toContain('live-one');
 		expect(notified).toHaveLength(0);
+	});
+
+	it('requests messages using the configured page size, both on initial load and on a background refresh', async () => {
+		const { store, messages } = createStore(async () => ({ items: [], nextUrl: undefined }), { ...DEFAULT_SETTINGS, messagePageSize: 200 });
+		await store.selectSpace('room');
+		expect(messages.list).toHaveBeenCalledWith(expect.objectContaining({ spaceId: 'room', max: 200 }));
+	});
+
+	it('exposes the initial settings on state and lets the host push updated settings live', async () => {
+		const { store } = createStore(async () => ({ items: [], nextUrl: undefined }));
+		expect(store.getSnapshot().settings).toEqual(DEFAULT_SETTINGS);
+
+		const updated = { ...DEFAULT_SETTINGS, messageDensity: 'compact' as const };
+		store.setSettings(updated);
+		expect(store.getSnapshot().settings).toEqual(updated);
 	});
 });
