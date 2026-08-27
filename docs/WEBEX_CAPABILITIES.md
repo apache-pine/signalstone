@@ -10,7 +10,7 @@
 | Edit/delete own message | Supported | Implemented for the authenticated user's messages |
 | Mentions | Sending: documented markup (`<@personEmail:...\|Name>`, `<@personId:...\|Name>`, `<@all>`). Rendering: `<spark-mention>` — Webex's own tag, undocumented but confirmed live, see below | Incoming: renders both forms as a styled `@Name`/`@all` span. Outgoing: type `@` in a group space's composer for autocomplete against loaded members, plus `@all`; resolves to the documented send-time markup. Not offered in direct spaces (no one else to mention) or the edit-in-place box |
 | Membership management | [Memberships API](https://developer.webex.com/docs/api/v1/memberships) | List, add by email, moderator toggle, and remove implemented for group spaces; space creation/rename UI still pending |
-| Realtime | [Browser SDK](https://developer.webex.com/messaging/docs/sdks/browser) | Confirmed reaching `Live`; four issues found and fixed along the way (a crash, a CORS block, a room-id encoding mismatch, and a missing plugin that silently broke every event envelope) — see below |
+| Realtime | [Browser SDK](https://developer.webex.com/messaging/docs/sdks/browser) | Confirmed reaching `Live`; five issues found and fixed along the way (a crash, a CORS block, a room-id encoding mismatch, a missing plugin that silently broke every event envelope, and a conversation list that went stale once live) — see below |
 | Notifications | Obsidian `Notice` API | Off / direct messages + @mentions / direct messages only / all messages, for top-level messages from someone else in a space that isn't open; optional message preview; no sound. Mention detection uses the Message resource's own documented `mentionedPeople`/`mentionedGroups` fields (https://developer.webex.com/docs/api/v1/messages), not markdown parsing |
 | Read state | SDK membership last-seen behavior exists | Not wired; no canonical-unread claim |
 | Emoji reactions | Private/internal only — see below | Intentionally not implemented |
@@ -83,7 +83,7 @@ integration surface, and reverse-engineering it would mean guessing at an
 undocumented, private protocol rather than using a supported API. Not
 implemented, and not planned unless Cisco documents a public endpoint.
 
-## Realtime: four issues found and fixed; confirmed reaching Live
+## Realtime: five issues found and fixed; confirmed reaching Live
 
 Getting the Webex Browser SDK to connect from inside Obsidian was an
 iterative process of live-testing, each fix revealing the next real blocker.
@@ -234,6 +234,77 @@ It's already lightweight — its own dependencies (`@webex/common`,
 `@webex/internal-plugin-mercury`, `@webex/webex-core`) were already pulled
 in transitively — and the bundle grew by under 5 KB.
 
+### 5. The conversation list went stale once live, because its only refresh path stopped (fixed)
+
+After issues 1–4 shipped and live testing confirmed instant message delivery
+into an open conversation, a live tester reported two related symptoms once
+the connection had settled into `Live` for a while: notifications for a
+background space, and the conversation list's ordering, both felt like they
+were "still based on polling" — arriving late, or not until something else
+happened.
+
+The conversation list half of this is traceable precisely, not a guess:
+`state.spaces` only ever reorders on a `refresh-space-list` event, and that
+event previously came from exactly two sources — `PollingFallback`'s 45-second
+timer, or a live SDK `rooms` "created"/"updated" event. `ResilientRealtimeProvider`
+stopped `PollingFallback` entirely the moment the primary connection reached
+`live` (`if (status === 'live') { await this.fallback.stop(); ... }`), so the
+45-second correction stopped happening at exactly the point the connection
+became reliable. That left the list dependent entirely on Webex pushing a
+live `rooms` event — and a room's `lastActivity` is a REST-layer field
+computed from its most recent message, not necessarily something Mercury
+pushes its own event for on every message. The result: while solidly `Live`,
+the list could go stale indefinitely, only correcting itself on the rare
+`rooms` event that did fire.
+
+Unlike issues 1–4, this part isn't traced to an exact line in the installed
+SDK source — there's no public documentation of Mercury's internal
+`rooms`-event firing rules to confirm or rule out, and reproducing it
+requires a live multi-client Webex session rather than something inspectable
+offline. The fix is deliberately robust to that uncertainty rather than
+depending on a specific theory being right:
+
+**Fix, part one — stop depending on a `rooms` event at all for reordering.**
+`SignalstoneStore.handleRealtime` already fetches the canonical message for
+every `message-created`/`message-updated` event (needed for issue 3's
+open-conversation logic). It now also calls a new `bumpSpaceActivity()`
+helper with that message's own `spaceId`/`created` timestamp — updating and
+re-sorting `state.spaces` immediately, the same way `loadSpaces()` sorts,
+whether or not the space is the one currently open. `send()` calls it too, so
+sending a message reorders your own view the same way. This makes the list
+reorder instantly, in lockstep with message delivery, independent of whether
+a `rooms` event ever fires. (A message in a space not yet in the loaded list
+— e.g. one you were just added to — is a no-op here and still picked up by a
+full space-list refresh instead.)
+
+**Fix, part two — keep a low-cost safety net running even while live.**
+`ResilientRealtimeProvider` no longer stops `PollingFallback` on reaching
+`live`; it now runs continuously for the lifetime of the connection. Its
+events are still filtered before reaching the rest of the app: the
+per-conversation poll (`poll-tick`) stays suppressed while live, since live
+delivery already covers the open conversation and firing it too would just be
+a redundant REST call every 15 seconds — but `refresh-space-list` is now
+always forwarded, live or not. That's one `GET /rooms` call every 45 seconds
+(the same cost as before this fix, just no longer switched off), and it
+independently catches anything part one's direct bump might miss — including,
+via `notifyBackgroundActivity`'s existing `lastActivity` diffing, background
+notifications, if the direct `message-created` → `maybeNotify` path (which
+looks correct on inspection, and is the same code path already confirmed
+instant for open conversations) turns out to have some as-yet-unconfirmed gap
+of its own.
+
+Covered by regression tests in `test/store.test.ts` (`bumpSpaceActivity`, both
+the reorder and the "space not loaded yet" no-op case) and a rewritten
+`test/realtime.test.ts` `ResilientRealtimeProvider` suite asserting the
+fallback is never stopped by a live transition and that only `poll-tick` is
+suppressed while live.
+
+Still not fully confirmed live: whether the notification delay the tester
+also reported was ever real, or was actually the conversation-list staleness
+being perceived as "no notification." Worth re-testing specifically once this
+fix is live, since notifications may turn out to have been working correctly
+all along.
+
 ### What this proves, and what's still open
 
 Issue 3's fix was real and still correct (a genuine encoding mismatch, now
@@ -253,6 +324,8 @@ opt-in "Debug logging" setting added alongside issue 4 (see
 final notify/patch decision, specifically to make that tracing fast rather
 than another guess-and-check round.
 
-Polling (15s for the open conversation, 45s for the space list) remains the
-automatic fallback whenever the SDK connection is unavailable, degraded, or
-reconnecting.
+Polling now serves two distinct roles, since issue 5's fix. The 15-second
+open-conversation poll remains purely a fallback: suppressed while live,
+active whenever the SDK connection is unavailable, degraded, or reconnecting.
+The 45-second space-list poll runs continuously regardless of connection
+status — a fallback while not live, and a low-cost live safety net otherwise.

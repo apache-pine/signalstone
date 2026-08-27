@@ -4,6 +4,16 @@ import { debugLog } from '../utils/logger';
 /**
  * Runs the Webex SDK connection as the primary event source and automatically
  * enables conservative REST polling whenever that connection is unavailable.
+ *
+ * The fallback provider is kept running continuously — not only while the
+ * primary is degraded — but only its conversation-list refresh is actually
+ * forwarded while the primary is `live`; its per-conversation poll is
+ * suppressed then, since live message delivery already covers the open
+ * conversation. This is a deliberate low-cost safety net: Webex does not
+ * reliably push a live room-updated event just because a message bumped that
+ * room's `lastActivity` (see docs/WEBEX_CAPABILITIES.md — Realtime, issue 5),
+ * so without this, the conversation list could go stale indefinitely while
+ * still solidly `live`.
  */
 export class ResilientRealtimeProvider implements RealtimeProvider {
 	status: RealtimeStatus = 'idle';
@@ -19,7 +29,7 @@ export class ResilientRealtimeProvider implements RealtimeProvider {
 	) {
 		primary.onEvent((event) => this.emit(event));
 		fallback.onEvent((event) => {
-			if (this.primary.status !== 'live') this.emit(event);
+			if (event.type === 'refresh-space-list' || this.primary.status !== 'live') this.emit(event);
 		});
 		primary.onStatusChange((status) => void this.handlePrimaryStatus(status));
 	}
@@ -27,7 +37,7 @@ export class ResilientRealtimeProvider implements RealtimeProvider {
 	async start(): Promise<void> {
 		this.stopping = false;
 		await this.primary.start();
-		if (this.primary.status !== 'live') await this.fallback.start();
+		await this.fallback.start();
 	}
 
 	async stop(): Promise<void> {
@@ -54,12 +64,6 @@ export class ResilientRealtimeProvider implements RealtimeProvider {
 	private async handlePrimaryStatus(status: RealtimeStatus): Promise<void> {
 		if (this.stopping) return;
 		debugLog('resilient', `Primary status changed to "${status}"`);
-		if (status === 'live') {
-			await this.fallback.stop();
-			this.setStatus('live');
-			return;
-		}
-		if (status === 'degraded') await this.fallback.start();
 		this.setStatus(status);
 	}
 
