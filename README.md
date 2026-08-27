@@ -18,7 +18,7 @@ New direct messages are supported. Group spaces have a member panel (list, add b
 
 ## Install and connect
 
-Signalstone requires Obsidian 1.11.4+. Build it, then copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/plugins/signalstone/`. Enable it and select an Obsidian secret containing a Webex token in Signalstone settings.
+Signalstone requires Obsidian 1.13.0+ (for the declarative settings API and secret storage). Build it, then copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/plugins/signalstone/`. Enable it and select an Obsidian secret containing a Webex token in Signalstone settings.
 
 A Webex account is required. Personal developer tokens normally expire after about 12 hours and Cisco positions them for development/testing, not production authentication. Signalstone embeds no OAuth client secret.
 

@@ -5,6 +5,7 @@
 If messages aren't appearing live or notifications seem inconsistent, turn on **Debug logging** in Signalstone's settings (Messaging section), reproduce the issue, then open DevTools (Ctrl+Shift+I / Cmd+Option+I) → Console and filter for `Signalstone:`. Every `[Signalstone:sdk]` line traces an event from the SDK; `[Signalstone:store]` traces how Signalstone routed it (open conversation vs. background vs. notify); `[Signalstone:main]` traces the final notification decision. Nothing logged means the event never reached that stage — that narrows down where to look far faster than guessing. Never logs your token or message content. Turn it back off when done; it's off by default.
 
 - [ ] Install in a dedicated vault; enable, disable, re-enable, and reload.
+- [ ] Open Settings → Signalstone: confirm Connection/Messaging/About render as grouped sections (not a flat list), the token field still works (select/change a secret, connection rebuilds), "Test connection" and "Disconnect" update the status text without a full settings reopen, and the Notifications dropdown / Debug logging toggle persist across an Obsidian restart. This is the declarative settings API (Obsidian 1.13.0+); it's new territory worth confirming directly since it can't be unit-tested (the `obsidian` package ships no runtime implementation to test against).
 - [ ] Validate a good, invalid, and expired token.
 - [ ] Load/filter recent direct and group spaces and older messages.
 - [ ] Send plain text and Markdown; receive from another client.
