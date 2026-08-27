@@ -25,15 +25,16 @@ function createStore(list: () => Promise<{ items: Space[]; nextUrl?: string }>, 
 	const messages = { list: vi.fn(async (): Promise<{ items: WebexMessage[]; nextUrl?: string }> => ({ items: [], nextUrl: undefined })), listReplies: vi.fn(async (): Promise<WebexMessage[]> => []), get: vi.fn(async () => message()), create: vi.fn(async (input: { parentId?: string }) => message({ parentId: input.parentId })), update: vi.fn(async (_id: string, input: { text?: string }) => message({ text: input.text, isEdited: true })), delete: vi.fn(async () => undefined) };
 	const memberships = { list: vi.fn(async (): Promise<{ items: Membership[]; nextUrl?: string }> => ({ items: [membership()], nextUrl: undefined })), add: vi.fn(async (spaceId: string, personEmail: string) => membership({ id: 'new', personEmail, spaceId })), setModerator: vi.fn(async (id: string, isModerator: boolean) => membership({ id, isModerator })), remove: vi.fn(async () => undefined) };
 	const realtime = new FakeRealtime();
+	const spaces = { list, create: vi.fn(async (title: string) => space(title)), rename: vi.fn(async (spaceId: string, title: string) => ({ ...space(title), id: spaceId })), delete: vi.fn(async () => undefined) };
 	const store = new SignalstoneStore(
 		{ status: 'connected', person: { id: 'me', displayName: 'Me', emails: [] } },
-		{ list }, messages, realtime,
+		spaces, messages, realtime,
 		{ fetch: vi.fn() },
 		{ list: vi.fn(async () => []) },
 		memberships,
 		settings,
 	);
-	return { store, messages, memberships, realtime };
+	return { store, messages, memberships, realtime, spaces };
 }
 
 describe('SignalstoneStore', () => {
@@ -64,6 +65,42 @@ describe('SignalstoneStore', () => {
 		await store.startDirectMessage({ email: 'alex@example.com' }, 'Hello Alex');
 		expect(messages.create).toHaveBeenCalledWith(expect.objectContaining({ toPersonEmail: 'alex@example.com', text: 'Hello Alex' }));
 		expect(store.getSnapshot().selectedSpaceId).toBe('room');
+	});
+
+	it('creates a space, adds members best-effort, and selects the new space', async () => {
+		const { store, memberships, spaces } = createStore(async () => ({ items: [], nextUrl: undefined }));
+		memberships.add.mockRejectedValueOnce(new Error('not found')).mockResolvedValueOnce(membership({ id: 'new', personEmail: 'good@example.com' }));
+
+		const result = await store.createSpace('  Project Room  ', ['bad@example.com', 'good@example.com']);
+
+		expect(spaces.create).toHaveBeenCalledWith('Project Room');
+		expect(memberships.add).toHaveBeenCalledWith('room', 'bad@example.com');
+		expect(memberships.add).toHaveBeenCalledWith('room', 'good@example.com');
+		expect(result.failedMemberEmails).toEqual(['bad@example.com']);
+		expect(result.space.title).toBe('Project Room');
+		expect(store.getSnapshot().spaces.map((item) => item.title)).toContain('Project Room');
+		expect(store.getSnapshot().selectedSpaceId).toBe('room');
+	});
+
+	it('renames a space in place without disturbing its position', async () => {
+		const { store } = createStore(async () => ({ items: [space('Old name')], nextUrl: undefined }));
+		await store.loadSpaces();
+
+		await store.renameSpace('room', 'New name');
+
+		expect(store.getSnapshot().spaces).toEqual([{ ...space('Old name'), title: 'New name' }]);
+	});
+
+	it('leaves a space, removing it from the list and returning to it if it was open', async () => {
+		const { store, spaces } = createStore(async () => ({ items: [space('Room')], nextUrl: undefined }));
+		await store.loadSpaces();
+		await store.selectSpace('room');
+
+		await store.leaveSpace('room');
+
+		expect(spaces.delete).toHaveBeenCalledWith('room');
+		expect(store.getSnapshot().spaces).toEqual([]);
+		expect(store.getSnapshot().selectedSpaceId).toBeNull();
 	});
 
 	it('lists, adds, promotes, and removes space members through the memberships API', async () => {

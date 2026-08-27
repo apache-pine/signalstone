@@ -53,7 +53,7 @@ export class SignalstoneStore {
 
 	constructor(
 		connection: ConnectionState,
-		private readonly spacesApi: Pick<SpacesApi, 'list'>,
+		private readonly spacesApi: Pick<SpacesApi, 'list' | 'create' | 'rename' | 'delete'>,
 		private readonly messagesApi: Pick<MessagesApi, 'list' | 'listReplies' | 'get' | 'create' | 'update' | 'delete'>,
 		private readonly realtimeProvider: RealtimeProvider,
 		private readonly attachmentsApi: Pick<AttachmentsApi, 'fetch'>,
@@ -167,6 +167,48 @@ export class SignalstoneStore {
 			this.patch({ spaces: [{ id: message.spaceId, title, type: 'direct', isLocked: false, lastActivity: message.created, creatorId: message.personId, created: message.created }, ...this.state.spaces] });
 		}
 		await this.selectSpace(message.spaceId);
+	}
+
+	/**
+	 * Creates a new group space and adds the given members by email,
+	 * best-effort — a member whose add fails (bad email, not found, etc.) is
+	 * reported back rather than silently dropped or aborting the whole
+	 * operation, since Webex enforces per-member validity server-side and
+	 * Signalstone shouldn't guess at it beforehand. Selects the new space on
+	 * success.
+	 */
+	async createSpace(title: string, memberEmails: string[] = []): Promise<{ space: Space; failedMemberEmails: string[] }> {
+		const space = await this.spacesApi.create(title.trim());
+		const failedMemberEmails: string[] = [];
+		for (const raw of memberEmails) {
+			const email = raw.trim();
+			if (!email) continue;
+			try { await this.membershipsApi.add(space.id, email); }
+			catch { failedMemberEmails.push(email); }
+		}
+		this.patch({ spaces: [space, ...this.state.spaces] });
+		await this.selectSpace(space.id);
+		return { space, failedMemberEmails };
+	}
+
+	async renameSpace(spaceId: string, title: string): Promise<void> {
+		const trimmed = title.trim();
+		if (!trimmed) return;
+		const updated = await this.spacesApi.rename(spaceId, trimmed);
+		this.patch({ spaces: this.state.spaces.map((space) => (space.id === spaceId ? updated : space)) });
+	}
+
+	/**
+	 * Deletes the space if the user is a moderator, or simply leaves it
+	 * otherwise (Webex's own semantics for DELETE /rooms/{id} — see
+	 * SpacesApi.delete). Scoped to group spaces only in the UI: deleting a
+	 * direct space ends the 1:1 conversation for both people, which isn't
+	 * the "leave" behavior a Leave button should imply.
+	 */
+	async leaveSpace(spaceId: string): Promise<void> {
+		await this.spacesApi.delete(spaceId);
+		this.patch({ spaces: this.state.spaces.filter((space) => space.id !== spaceId) });
+		if (this.state.selectedSpaceId === spaceId) await this.selectSpace(null);
 	}
 
 	async listMembers(spaceId: string): Promise<Membership[]> {
