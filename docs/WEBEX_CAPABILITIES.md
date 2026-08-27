@@ -3,7 +3,7 @@
 | Feature | Public capability | Implementation |
 |---|---|---|
 | Markdown | [Create Message](https://developer.webex.com/docs/api/v1/messages/create-a-message), [documented syntax](https://developer.webex.com/formatting-messages.html) | Outgoing: sent via the `markdown` field. Incoming: rendered as React elements (never HTML) for bold, italic, links, ordered/unordered lists with nesting, blockquotes, inline code, fenced code blocks, and mentions — see `src/utils/webexMarkdown.tsx` |
-| Spaces/direct spaces | [Rooms API](https://developer.webex.com/docs/api/v1/rooms) | List/open/create/rename/leave implemented |
+| Spaces/direct spaces | [Rooms API](https://developer.webex.com/docs/api/v1/rooms) | List/open/create/rename/leave implemented via a right-click menu; direct spaces can also be hidden/unhidden without leaving them (confirmed rejected for group spaces — see below); favoriting (any space, always sorts first) is local-only, no public API for it exists |
 | Paginated history | [List Messages](https://developer.webex.com/docs/api/v1/messages/list-messages) | Implemented |
 | File/GIF upload | Supported; one file per request | Upload and authenticated received preview/save implemented |
 | Threads | Supported via `parentId` | Reply, focused thread, and inline reply context implemented |
@@ -126,6 +126,106 @@ is shown:
   realtime presence-change event wired up (and no plan to poll faster than
   the conversation-list cadence for it) — it reflects whatever `GET /people`
   last returned, refreshed on the cadence described above.
+
+## Conversation-list right-click menu, favorites, and hiding a direct message
+
+A row in the conversation list now has a right-click menu, built on
+Obsidian's own `Menu` class (native styling, keyboard nav, outside-click
+dismissal — see `src/components/spaceContextMenu.ts`) rather than a
+hand-rolled dropdown. Group and direct spaces get different item sets, since
+the available actions genuinely differ:
+
+- **Group**: Open, Favorite/Unfavorite, Manage members, Rename…, and a
+  warning-styled "Leave this space…". Leave never acts on the first click —
+  it opens a small second confirm menu at the same position ("Cancel" / a
+  red "Leave this space") first, the same principle as every other
+  destructive action in Signalstone (message delete, member remove).
+- **Direct**: Open, Favorite/Unfavorite, Copy email address, and Hide/Unhide.
+
+"Manage members" and "Rename…" open the space directly into that view
+(member panel, or the header's inline rename editor already used for the ✎
+button) instead of the normal message view — a small piece of router state
+(`pendingSpaceView` in `SignalstoneApp.tsx`) carries the intent across the
+navigation and is consumed once, on that screen's first mount.
+
+**Hiding** removes a space from your own view without leaving it or ending
+it for anyone else — the practical DM-equivalent of a group's Leave, for a
+conversation you can't (and shouldn't be able to) delete unilaterally — and
+needs no confirmation step of its own: it's fully reversible. It uses the
+Memberships resource's own `isRoomHidden` field (confirmed public —
+`PUT /memberships/{id}` with `{isRoomHidden}`, the same `service: 'hydra'`
+REST layer every other membership write already uses, not the private
+`webex.internal.conversation` service the read/unread investigation above
+ruled out for a different purpose). Hiding a space only changes *your*
+membership; the room itself, and everyone else's access to it, is untouched.
+
+**Confirmed live: direct-space only.** Cisco's own SDK JSDoc demonstrates
+`isRoomHidden` specifically as "hide a one on one space," and that turned
+out to be a real restriction, not just an example — live testing confirmed
+Webex's server rejects the write for a group-space membership. The
+right-click menu now only offers Hide/Unhide for direct spaces.
+`SignalstoneStore.hideSpace()`/`unhideSpace()` themselves are left fully
+general (no space-type check) rather than removed outright, in case Cisco
+ever changes this — only the menu's item list is scoped, so restoring the
+group case later is a one-line change, not a rebuild. The `.catch()` added
+alongside this finding stays regardless: any future failure mode still
+surfaces as a Notice instead of an unhandled rejection.
+
+Knowing which spaces are hidden costs one bulk call, not one per space:
+`GET /memberships` with no `roomId` returns the authenticated user's own
+membership across every space in a single request (Webex's documented
+behavior) — exactly the `isRoomHidden` flag needed. This runs on every
+`loadSpaces()` call unconditionally (not gated behind a setting, unlike
+avatar/presence): the cost is comparable to the room list fetch that already
+happens on the same cadence, and a correct recents list — one that actually
+excludes what you've hidden, matching every other Webex client — is baseline
+behavior, not an opt-in enhancement.
+
+A hidden space is simply excluded from `state.spaces` by default. The new
+"Show hidden conversations" setting (off by default) makes it reappear,
+marked "Hidden" and dimmed, so it can be found again and unhidden from the
+same right-click menu — without this, hiding would be a one-way trip with no
+way back, which would have made it unsafe to ship.
+
+Covered by new tests in `test/store.test.ts` for the filter/include
+behavior, `hideSpace`/`unhideSpace`, and that a hidden space's background
+activity does not notify. `spaceContextMenu.ts` itself is not unit tested —
+like `SignalstoneSettingTab.ts`, it depends on Obsidian API classes
+(`Menu`, `Notice`) the `obsidian` npm package ships no runtime for; verified
+through the manual checklist in `docs/TESTING.md` instead.
+
+### Favorites: confirmed local-only, Webex has no public equivalent
+
+Checked directly against the installed SDK source, the same way as every
+other capability question here. `favorite`/`unfavorite` do exist as real
+Webex concepts — `@webex/internal-plugin-conversation` defines them as
+simple activities (`Conversation.prototype.favorite`/`.unfavorite`, alongside
+`hide`/`lock`/`mute` and their inverses, all submitted the same generic way)
+— but, like the emoji-reaction and true-read/unread findings, that's the
+private, undocumented `internal-plugin-*` service, not `webexapis.com`. A
+search across every *public* plugin (`plugin-rooms`, `plugin-memberships`,
+`plugin-messages`, `plugin-people`) turns up no favorite/pin/star concept of
+any kind — not even a documented field that's merely unused. Unlike read
+receipts (receive-only was still possible through a public event) or hiding
+(a public field existed for a related purpose), there is no public angle
+into favoriting at all.
+
+Implemented entirely client-side as a result: `favoriteSpaceIds: string[]`
+on `SignalstoneSettings`, toggled by `SignalstoneStore.toggleFavorite()`
+(synchronous — no API call, nothing to fail) and persisted through
+`onSettingsChanged`, a new callback on the store mirroring the existing
+`notify` pattern but running in the opposite direction — this is the first
+case where a UI-triggered action (the row context menu) needs to write back
+into the settings `main.ts` owns and persists to disk, rather than the
+Settings tab pushing a change down to the store. Favorited spaces sort
+first in the conversation list via a stable partition applied after the
+existing recent/alphabetical sort (stability, guaranteed by spec since
+ES2019, keeps each group's relative order intact — favorites stay sorted
+among themselves too, not just dumped in arbitrary order at the top).
+
+Since this never touches Webex, it's also the one action in the whole
+right-click menu with no possible failure mode and no confirmation need —
+toggling it is instantaneous and always succeeds.
 
 ## Space management: create, rename, leave
 
