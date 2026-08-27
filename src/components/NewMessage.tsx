@@ -2,8 +2,7 @@ import { useState } from 'react';
 import type { Person } from '../models/Person';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
 import { errorMessage } from '../utils/format';
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { isValidEmail } from '../utils/email';
 
 /** Directory search (by name or exact email) to start a new direct message. */
 export function NewMessage({ store, onClose }: { store: SignalstoneStore; onClose: () => void }) {
@@ -40,7 +39,7 @@ export function NewMessage({ store, onClose }: { store: SignalstoneStore; onClos
 		}
 	};
 
-	const exactEmail = EMAIL_PATTERN.test(query.trim());
+	const exactEmail = isValidEmail(query);
 
 	return (
 		<section className="signalstone-app signalstone-new-message">

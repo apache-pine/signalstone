@@ -3,12 +3,24 @@ import { parseLinkHeader } from '../src/api/pagination';
 import { parseFilenameFromContentDisposition } from '../src/utils/contentDisposition';
 import { isImageContentType } from '../src/models/Attachment';
 import { formatDate, resolveSenderName } from '../src/utils/format';
+import { isValidEmail } from '../src/utils/email';
 import type { Space } from '../src/models/Space';
 
 describe('safe parsing helpers', () => {
 	it('parses pagination links', () => expect(parseLinkHeader('<https://webexapis.com/v1/messages?x=1>; rel="next"').next).toContain('x=1'));
 	it('decodes attachment filenames', () => expect(parseFilenameFromContentDisposition("attachment; filename*=UTF-8''hello%20world.gif")).toBe('hello world.gif'));
 	it('recognizes supported inline images including GIF', () => { expect(isImageContentType('image/gif')).toBe(true); expect(isImageContentType('text/html')).toBe(false); });
+});
+
+describe('isValidEmail', () => {
+	it('accepts a well-formed address, tolerating surrounding whitespace', () => {
+		expect(isValidEmail('  anthony.perez@example.com  ')).toBe(true);
+	});
+
+	it('rejects a bare name with no @ or domain', () => {
+		expect(isValidEmail('anthony')).toBe(false);
+		expect(isValidEmail('anthony@example')).toBe(false);
+	});
 });
 
 describe('resolveSenderName', () => {
