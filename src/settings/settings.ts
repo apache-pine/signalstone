@@ -47,6 +47,19 @@ export interface SignalstoneSettings {
 	showPresenceInRecents: boolean;
 	showAvatarsInConversations: boolean;
 	showPresenceInConversations: boolean;
+	/** Whether a space you have hidden (from Signalstone or another Webex client) still appears in the conversation list, marked "Hidden", so it can be unhidden from the right-click menu. Off by default: hidden stays hidden. */
+	showHiddenConversations: boolean;
+	/**
+	 * Spaces favorited via the conversation list's right-click menu, always
+	 * sorted first regardless of "Sort conversations by". Local-only —
+	 * Webex's public API has no favorite/pin concept at all (confirmed
+	 * against the installed SDK source; the private, undocumented
+	 * `internal-plugin-conversation` service has one, the same territory
+	 * already ruled out for emoji reactions and true read/unread state — see
+	 * docs/WEBEX_CAPABILITIES.md, "Favorites"), so this exists only in
+	 * Signalstone's own persisted settings, keyed by space id.
+	 */
+	favoriteSpaceIds: string[];
 }
 
 export const DEFAULT_SETTINGS: SignalstoneSettings = {
@@ -69,6 +82,8 @@ export const DEFAULT_SETTINGS: SignalstoneSettings = {
 	showPresenceInRecents: false,
 	showAvatarsInConversations: false,
 	showPresenceInConversations: false,
+	showHiddenConversations: false,
+	favoriteSpaceIds: [],
 };
 
 /**

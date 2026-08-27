@@ -88,6 +88,7 @@ export default class SignalstonePlugin extends Plugin {
 		const spaces = new SpacesApi(client);
 		this.store = new SignalstoneStore(this.auth.state, spaces, new MessagesApi(client), this.realtime, new AttachmentsApi(client), people, new MembershipsApi(client), this.settings);
 		this.store.notify = (message) => this.showNotification(message);
+		this.store.onSettingsChanged = (settings) => { this.settings = settings; void this.saveSettings(); };
 		this.unsubscribeAuth = this.auth.onStateChange((state) => { this.store.setConnection(state); if (state.status === 'connected') { void this.realtime.start(); void this.store.loadSpaces(); } else { void this.realtime.stop(); } });
 	}
 

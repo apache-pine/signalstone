@@ -9,4 +9,6 @@ export interface Membership {
 	isModerator: boolean;
 	isMonitor: boolean;
 	created: string;
+	/** Whether the authenticated user has hidden this space from their own view (a per-membership flag; direct spaces only in Signalstone's UI — see SignalstoneStore.hideSpace/unhideSpace). */
+	isRoomHidden: boolean;
 }

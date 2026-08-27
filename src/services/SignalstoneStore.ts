@@ -36,6 +36,8 @@ export interface SignalstoneState {
 	readReceiptsBySpace: Record<string, Record<string, ReadReceipt>>;
 	/** Avatar/presence for direct spaces, by spaceId. Only populated while at least one of the four avatar/presence settings is on. */
 	directoryInfoBySpaceId: Record<string, DirectoryInfo>;
+	/** Every space the authenticated user has hidden, by spaceId — including ones currently filtered out of `spaces` (see loadSpaces). Always kept current regardless of settings, since it also gates notifications. */
+	hiddenSpaceIds: Record<string, boolean>;
 	nextMessagesUrl?: string;
 	loading: boolean;
 	error?: string;
@@ -49,6 +51,14 @@ export class SignalstoneStore {
 	 * user's notification setting actually wants to see it.
 	 */
 	notify?: (message: WebexMessage) => void;
+
+	/**
+	 * Set by the host (main.ts) to persist a settings change the store itself
+	 * initiated (currently just toggleFavorite) — the reverse direction of
+	 * setSettings(), which is how the host pushes a Settings-tab change down.
+	 * main.ts owns disk persistence; the store only ever holds a working copy.
+	 */
+	onSettingsChanged?: (settings: SignalstoneSettings) => void;
 
 	private state: SignalstoneState;
 	private listeners = new Set<() => void>();
@@ -68,10 +78,10 @@ export class SignalstoneStore {
 		private readonly realtimeProvider: RealtimeProvider,
 		private readonly attachmentsApi: Pick<AttachmentsApi, 'fetch'>,
 		private readonly peopleApi: Pick<PeopleApi, 'list'>,
-		private readonly membershipsApi: Pick<MembershipsApi, 'list' | 'add' | 'setModerator' | 'remove'>,
+		private readonly membershipsApi: Pick<MembershipsApi, 'list' | 'add' | 'setModerator' | 'setHidden' | 'remove'>,
 		settings: SignalstoneSettings = DEFAULT_SETTINGS,
 	) {
-		this.state = { connection, realtime: realtimeProvider.status, realtimeDetail: realtimeProvider.detail, settings, spaces: [], selectedSpaceId: null, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, readReceiptsBySpace: {}, directoryInfoBySpaceId: {}, loading: false };
+		this.state = { connection, realtime: realtimeProvider.status, realtimeDetail: realtimeProvider.detail, settings, spaces: [], selectedSpaceId: null, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, readReceiptsBySpace: {}, directoryInfoBySpaceId: {}, hiddenSpaceIds: {}, loading: false };
 		this.unsubscribeRealtime = realtimeProvider.onEvent((event) => void this.handleRealtime(event));
 		this.unsubscribeRealtimeStatus = realtimeProvider.onStatusChange((realtime) => this.patch({ realtime, realtimeDetail: realtimeProvider.detail }));
 	}
@@ -88,8 +98,12 @@ export class SignalstoneStore {
 	 */
 	setSettings(settings: SignalstoneSettings): void {
 		const wasEnabled = this.wantsDirectoryInfo(this.state.settings);
+		const hiddenVisibilityChanged = settings.showHiddenConversations !== this.state.settings.showHiddenConversations;
 		this.patch({ settings });
 		if (!wasEnabled && this.wantsDirectoryInfo(settings)) void this.refreshDirectoryInfo();
+		// Re-applies the hidden/visible filter immediately rather than waiting
+		// for the next natural conversation-list refresh.
+		if (hiddenVisibilityChanged) void this.loadSpaces();
 	}
 
 	async loadSpaces(): Promise<void> {
@@ -97,15 +111,39 @@ export class SignalstoneStore {
 		try {
 			const page = await this.spacesApi.list({ max: 50 });
 			const sorted = page.items.sort((a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity));
-			if (this.notify) await this.notifyBackgroundActivity(sorted);
+			const hiddenSpaceIds = await this.fetchHiddenSpaceIds();
+			const visible = this.state.settings.showHiddenConversations ? sorted : sorted.filter((space) => !hiddenSpaceIds[space.id]);
+			if (this.notify) await this.notifyBackgroundActivity(visible);
 			this.lastKnownActivity = new Map(sorted.map((space) => [space.id, space.lastActivity]));
-			this.patch({ spaces: sorted, loading: false });
+			this.patch({ spaces: visible, hiddenSpaceIds, loading: false });
 			// Piggybacks on this same refresh cycle (initial load, every
 			// refresh-space-list event, and a manual refresh click) rather than
 			// running its own timer -- see docs/WEBEX_CAPABILITIES.md, "Avatars
 			// and presence".
 			void this.refreshDirectoryInfo();
 		} catch (error) { this.patch({ loading: false, error: this.message(error) }); }
+	}
+
+	/**
+	 * A space you've hidden (via Signalstone's own "Hide this conversation" or
+	 * another Webex client) still exists as a room and would otherwise appear
+	 * unchanged in the list; excluding it here is what actually makes hiding
+	 * mean something. `GET /memberships` with no roomId returns only the
+	 * authenticated user's own membership across every space in one call
+	 * (Webex's documented behavior) -- exactly the isRoomHidden flag needed,
+	 * without a per-space request. Best-effort: on failure, keeps whatever was
+	 * already known rather than treating everything as suddenly un-hidden.
+	 */
+	private async fetchHiddenSpaceIds(): Promise<Record<string, boolean>> {
+		try {
+			const page = await this.membershipsApi.list({ max: 200 });
+			const hidden: Record<string, boolean> = {};
+			for (const membership of page.items) if (membership.isRoomHidden) hidden[membership.spaceId] = true;
+			return hidden;
+		} catch (error) {
+			debugLog('store', 'Failed to fetch hidden-space status', { error: this.message(error) });
+			return this.state.hiddenSpaceIds;
+		}
 	}
 
 	async selectSpace(spaceId: string | null): Promise<void> {
@@ -224,6 +262,20 @@ export class SignalstoneStore {
 	}
 
 	/**
+	 * Local-only, no API call — see docs/WEBEX_CAPABILITIES.md, "Favorites".
+	 * Persisted immediately via onSettingsChanged, the reverse direction of
+	 * the usual host-pushes-settings-down flow, since this originates from a
+	 * UI action (the row context menu) rather than the Settings tab.
+	 */
+	toggleFavorite(spaceId: string): void {
+		const current = this.state.settings.favoriteSpaceIds;
+		const favoriteSpaceIds = current.includes(spaceId) ? current.filter((id) => id !== spaceId) : [...current, spaceId];
+		const settings = { ...this.state.settings, favoriteSpaceIds };
+		this.patch({ settings });
+		this.onSettingsChanged?.(settings);
+	}
+
+	/**
 	 * Deletes the space if the user is a moderator, or simply leaves it
 	 * otherwise (Webex's own semantics for DELETE /rooms/{id} — see
 	 * SpacesApi.delete). Scoped to group spaces only in the UI: deleting a
@@ -234,6 +286,45 @@ export class SignalstoneStore {
 		await this.spacesApi.delete(spaceId);
 		this.patch({ spaces: this.state.spaces.filter((space) => space.id !== spaceId) });
 		if (this.state.selectedSpaceId === spaceId) await this.selectSpace(null);
+	}
+
+	/**
+	 * Hides a space from the conversation list without leaving it — fully
+	 * reversible via unhideSpace/"Show hidden conversations", so unlike
+	 * leaveSpace this needs no confirmation step of its own. Offered in the
+	 * UI for both group and direct spaces; the underlying membership flag
+	 * isn't documented as direct-space-only, only demonstrated that way in
+	 * Cisco's own SDK example — if Webex's server does turn out to reject it
+	 * for a group space, that surfaces as a normal thrown error (the
+	 * context-menu caller shows it as a Notice) rather than silently no-op'ing.
+	 */
+	async hideSpace(spaceId: string): Promise<void> {
+		const membershipId = await this.selfMembershipId(spaceId);
+		if (!membershipId) return;
+		await this.membershipsApi.setHidden(membershipId, true);
+		this.patch({ spaces: this.state.spaces.filter((space) => space.id !== spaceId), hiddenSpaceIds: { ...this.state.hiddenSpaceIds, [spaceId]: true } });
+		if (this.state.selectedSpaceId === spaceId) await this.selectSpace(null);
+	}
+
+	/** Only reachable for a space already visible via "Show hidden conversations" — see hideSpace. */
+	async unhideSpace(spaceId: string): Promise<void> {
+		const membershipId = await this.selfMembershipId(spaceId);
+		if (!membershipId) return;
+		await this.membershipsApi.setHidden(membershipId, false);
+		const hiddenSpaceIds = { ...this.state.hiddenSpaceIds };
+		delete hiddenSpaceIds[spaceId];
+		this.patch({ hiddenSpaceIds });
+	}
+
+	private async selfMembershipId(spaceId: string): Promise<string | undefined> {
+		const selfId = this.state.connection.status === 'connected' ? this.state.connection.person.id : undefined;
+		try {
+			const page = await this.membershipsApi.list({ spaceId, personId: selfId });
+			return page.items[0]?.id;
+		} catch (error) {
+			debugLog('store', 'Failed to resolve own membership id', { spaceId, error: this.message(error) });
+			return undefined;
+		}
 	}
 
 	async listMembers(spaceId: string): Promise<Membership[]> {
@@ -326,6 +417,7 @@ export class SignalstoneStore {
 		const selfId = this.state.connection.status === 'connected' ? this.state.connection.person.id : undefined;
 		if (!selfId || message.personId === selfId) return;
 		if (message.spaceId === this.state.selectedSpaceId) return;
+		if (this.state.hiddenSpaceIds[message.spaceId]) return;
 		debugLog('store', 'Notifying for background message', { messageId: message.id, spaceId: message.spaceId, hasNotifyHandler: Boolean(this.notify) });
 		this.notify?.(message);
 	}

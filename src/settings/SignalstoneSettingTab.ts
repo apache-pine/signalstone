@@ -178,6 +178,11 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 						desc: 'Turn off to only auto-scroll when you were already near the bottom — so scrolling up to read history is not interrupted by a new message arriving.',
 						control: { type: 'toggle', key: 'alwaysScrollToNewest' },
 					},
+					{
+						name: 'Show hidden conversations',
+						desc: 'A direct message you hide (via the right-click menu, or another Webex client) is excluded from the list by default. Turn this on to see hidden conversations too, marked "Hidden", so they can be unhidden from the same right-click menu.',
+						control: { type: 'toggle', key: 'showHiddenConversations' },
+					},
 				],
 			},
 			{
@@ -246,6 +251,7 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			case 'showPresenceInRecents': return settings.showPresenceInRecents;
 			case 'showAvatarsInConversations': return settings.showAvatarsInConversations;
 			case 'showPresenceInConversations': return settings.showPresenceInConversations;
+			case 'showHiddenConversations': return settings.showHiddenConversations;
 			default: return undefined;
 		}
 	}
@@ -271,6 +277,7 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			case 'showPresenceInRecents': settings.showPresenceInRecents = value as boolean; break;
 			case 'showAvatarsInConversations': settings.showAvatarsInConversations = value as boolean; break;
 			case 'showPresenceInConversations': settings.showPresenceInConversations = value as boolean; break;
+			case 'showHiddenConversations': settings.showHiddenConversations = value as boolean; break;
 			default: return;
 		}
 		await this.plugin.saveSettings();

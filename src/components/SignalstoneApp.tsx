@@ -20,6 +20,15 @@ function SignalstoneRouter({ store, openSettings }: { store: SignalstoneStore; o
 	const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
 	const [startingNewMessage, setStartingNewMessage] = useState(false);
 	const [startingNewSpace, setStartingNewSpace] = useState(false);
+	// Set by the row context menu's "Manage members"/"Rename…" items so the
+	// conversation opens directly into that view instead of the normal one;
+	// consumed (cleared) by Conversation on mount, so a later, ordinary open
+	// of the same space behaves normally again.
+	const [pendingSpaceView, setPendingSpaceView] = useState<{ spaceId: string; view: 'members' | 'rename' } | null>(null);
+	const openSpaceWithView = (spaceId: string, view: 'members' | 'rename') => {
+		setPendingSpaceView({ spaceId, view });
+		void store.selectSpace(spaceId);
+	};
 
 	useEffect(() => {
 		if (state.connection.status === 'connected' && state.spaces.length === 0) void store.loadSpaces();
@@ -31,7 +40,17 @@ function SignalstoneRouter({ store, openSettings }: { store: SignalstoneStore; o
 
 	const selectedSpace = state.spaces.find((space) => space.id === state.selectedSpaceId);
 	if (selectedSpace) {
-		return <Conversation title={selectedSpace.title || 'Direct message'} spaceType={selectedSpace.type} state={state} store={store} selfId={state.connection.person.id} />;
+		return (
+			<Conversation
+				title={selectedSpace.title || 'Direct message'}
+				spaceType={selectedSpace.type}
+				state={state}
+				store={store}
+				selfId={state.connection.person.id}
+				initialView={pendingSpaceView?.spaceId === selectedSpace.id ? pendingSpaceView.view : undefined}
+				onInitialViewConsumed={() => setPendingSpaceView(null)}
+			/>
+		);
 	}
 
 	if (startingNewMessage) {
@@ -42,5 +61,5 @@ function SignalstoneRouter({ store, openSettings }: { store: SignalstoneStore; o
 		return <NewSpace store={store} onClose={() => setStartingNewSpace(false)} />;
 	}
 
-	return <ConversationList state={state} store={store} onNewMessage={() => setStartingNewMessage(true)} onNewSpace={() => setStartingNewSpace(true)} />;
+	return <ConversationList state={state} store={store} onNewMessage={() => setStartingNewMessage(true)} onNewSpace={() => setStartingNewSpace(true)} onOpenSpaceView={openSpaceWithView} />;
 }

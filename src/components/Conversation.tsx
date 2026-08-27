@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SpaceType } from '../models/Space';
 import type { SignalstoneState, SignalstoneStore } from '../services/SignalstoneStore';
 import { ConversationHeader } from './ConversationHeader';
@@ -14,17 +14,28 @@ export function Conversation({
 	state,
 	store,
 	selfId,
+	initialView,
+	onInitialViewConsumed,
 }: {
 	title: string;
 	spaceType: SpaceType;
 	state: SignalstoneState;
 	store: SignalstoneStore;
 	selfId: string;
+	/** Set by the conversation list's row context menu ("Manage members"/"Rename…") to land here directly instead of the normal view. */
+	initialView?: 'members' | 'rename';
+	onInitialViewConsumed?: () => void;
 }) {
 	const [draft, setDraft] = useState('');
 	const [file, setFile] = useState<File>();
 	const [sending, setSending] = useState(false);
-	const [showMembers, setShowMembers] = useState(false);
+	const [showMembers, setShowMembers] = useState(initialView === 'members');
+	useEffect(() => {
+		if (initialView) onInitialViewConsumed?.();
+		// Intentionally fires once, on mount only -- this only ever needs to
+		// consume the intent that was present when this conversation first
+		// opened, not react to it changing afterward.
+	}, []);
 	const isThread = state.threadParentId !== null;
 	const spaceId = state.selectedSpaceId ?? '';
 	const directoryInfo = spaceType === 'direct' ? state.directoryInfoBySpaceId[spaceId] : undefined;
@@ -58,6 +69,7 @@ export function Conversation({
 				onRename={!isThread && spaceType === 'group' ? (nextTitle) => void store.renameSpace(spaceId, nextTitle) : undefined}
 				avatarUrl={avatarUrl}
 				presence={presence}
+				startEditing={initialView === 'rename'}
 			/>
 			<MessageList state={state} store={store} selfId={selfId} />
 			<MessageComposer
