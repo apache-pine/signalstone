@@ -1,9 +1,17 @@
 {
 	"name": "signalstone",
-	"version": "0.1.0",
+	"version": "1.0.0",
 	"description": "A lightweight Webex messaging client for the Obsidian sidebar.",
 	"main": "main.js",
 	"type": "module",
+	"author": {
+		"name": "apache-pine",
+		"url": "https://github.com/apache-pine"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/apache-pine/signalstone.git"
+	},
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
@@ -18,7 +26,7 @@
 		"webex",
 		"messaging"
 	],
-	"license": "UNLICENSED",
+	"license": "MIT",
 	"devDependencies": {
 		"@testing-library/jest-dom": "^6.6.3",
 		"@testing-library/react": "^16.1.0",

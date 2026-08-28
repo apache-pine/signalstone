@@ -1,5 +1,25 @@
 # Manual live-Webex checklist
 
+## Status as of 1.0
+
+Every feature area below has been exercised against live Webex during
+development and confirmed working — auth, messaging, threads, markdown,
+mentions, realtime (including all five issues under "Realtime" in
+`docs/WEBEX_CAPABILITIES.md`), notifications, read receipts, space
+management, avatars/presence, the conversation-list context menu
+(favorites, hide/unhide), and the image lightbox all specifically got a
+"works" confirmation at least once. This checklist isn't a one-time gate
+that gets checked off and archived, though — it stays here as the reference
+for exercising the same surface again after a future change, so the boxes
+below are deliberately left unchecked rather than retroactively marked from
+memory of exactly which line was tested when.
+
+Two items have *not* been exercised against the real thing yet, flagged
+individually below and in "Pending live tests" at the bottom: SDK
+reconnect/recovery after a genuine network interruption (the logic and its
+unit tests exist; only a live network drop hasn't been tried), and the
+Adaptive Card fallback against an actual card-sending bot.
+
 ## Troubleshooting realtime/notification delivery
 
 If messages aren't appearing live or notifications seem inconsistent, turn on **Debug logging** in Signalstone's settings (Advanced section), reproduce the issue, then open DevTools (Ctrl+Shift+I / Cmd+Option+I) → Console and filter for `Signalstone:`. Every `[Signalstone:sdk]` line traces an event from the SDK; `[Signalstone:store]` traces how Signalstone routed it (open conversation vs. background vs. notify); `[Signalstone:main]` traces the final notification decision. Nothing logged means the event never reached that stage — that narrows down where to look far faster than guessing. Never logs your token or message content. Turn it back off when done; it's off by default.
