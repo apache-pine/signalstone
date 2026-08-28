@@ -59,9 +59,24 @@ export function resolveSenderName(message: { personDisplayName?: string; personE
  * newline, so without this a multi-line draft would collapse onto one line
  * everywhere it's rendered. Applied only to the outgoing `markdown` field —
  * the plain-text fallback doesn't need markdown escaping.
+ *
+ * A blank line (two Shift+Enters in a row — a paragraph break, not a line
+ * break within one paragraph) is deliberately left untouched rather than
+ * also getting the hard-break treatment. Encoding it the same way turned it
+ * into two lines that are each just two spaces and nothing else; that does
+ * not reliably survive Webex's server round-trip (a line with only
+ * whitespace commonly gets trimmed), which silently turned an intentional
+ * blank line back into a soft join once the sent message came back and was
+ * re-rendered — the blank line collapsed away. A genuine blank line already
+ * renders correctly as its own paragraph via `splitBlocks`'s own
+ * blank-line handling in `webexMarkdown.tsx`, so it never needed hard-break
+ * encoding in the first place.
  */
 export function toWebexMarkdown(text: string): string {
-	return text.replace(/ *\n/g, '  \n');
+	return text
+		.split(/(\n{2,})/)
+		.map((part, index) => (index % 2 === 0 ? part.replace(/ *\n/g, '  \n') : part))
+		.join('');
 }
 
 /** Extracts a safe, user-facing message from a caught error, falling back to a generic message. */

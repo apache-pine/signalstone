@@ -66,6 +66,85 @@ never read as anything meaningful, and the raw tag is never treated as
 HTML. Covered by a regression test in `test/webex-markdown.test.tsx` using
 the exact tag observed live.
 
+## Line breaks: the documented soft-join rule doesn't hold for rendering, at all
+
+Reported live in two parts, and the fix changed shape between them —
+documented here with both rounds intact rather than cleaned up into a
+single tidy story, since the correction itself is the useful part.
+
+**Round one.** A message got reported rendering as one line instead of one
+row per line — a Wordle result. The working theory at the time: Webex's
+documented "a bare newline is a soft join; only two trailing spaces make a
+hard break" rule is a *Markdown-syntax* convention, so a message with no
+`markdown` field at all (assumed to be a bot integration sending only
+`text`) never opted into it — plain text has no soft-join rule to apply.
+Shipped as a `plainText` option on `renderWebexMarkdown()`, active only
+when `message.markdown` was falsy.
+
+**Round two, immediately after.** Turned out there was no bot — it's a
+person pasting NYT Wordle's own share text straight into Webex's native
+compose box. That single fact invalidates the field-presence theory
+entirely: Webex's own client populates `markdown` for everything typed or
+pasted there, formatted or not, so the "no `markdown` field" condition the
+round-one fix keyed off would never have been true for this message in the
+first place, and the fix would not have helped it. If a message that *does*
+have a `markdown` field still needs every newline treated as a real break,
+the field's presence was never a meaningful signal to begin with — the
+rule doesn't hold for rendering *at all*, not just for a narrower plain-text
+case.
+
+**Fix.** `renderParagraphLines()` (in `webexMarkdown.tsx`) now treats every
+newline as a real line break unconditionally, no exceptions, no `plainText`
+option. This matches how the plain preformatted-text display worked before
+this renderer existed at all — and, apparently, how Webex's real clients
+actually behave, regardless of what the formatting docs describe. A line's
+trailing spaces (still meaningful on the *outgoing* side — see below) are
+now just stripped before display rather than inspected.
+
+**The outgoing side is unaffected and stays as previously fixed.**
+`toWebexMarkdown()` still inserts Webex's documented two-trailing-space
+hard-break marker on every newline within a paragraph when Signalstone
+sends a message — confirmed working correctly for how *other* Webex
+clients render what Signalstone sends, a genuinely different question from
+how Signalstone renders what it receives. It still leaves an actual blank
+line (a paragraph break, two Shift+Enters) untouched rather than
+hard-break-encoding it, for the reason recorded when that part was fixed:
+a line that's purely whitespace does not reliably survive Webex's server
+round-trip, so encoding a blank line's own newlines the same way as a
+content line's silently lost the gap once the sent message came back and
+was re-rendered.
+
+Neither the original bug nor the round-one fix's own gap were caught by
+testing before shipping — both are live usage patterns (a real pasted
+result; a message that turned out not to be from a bot after all) the
+original test suite didn't happen to construct, and in round one's case,
+a plausible-sounding theory that direct live clarification from the person
+who'd actually see the bug disproved before it ever reached testing.
+Covered now by regression tests in `test/webex-markdown.test.tsx`
+reproducing the actual scenario — a pasted multi-line grid with a
+`markdown`-shaped block, one row per line, no hard-break markers.
+
+**Round three: a blank line specifically was still invisible, and this
+part had nothing to do with data at all.** After round two shipped, a
+sent message with a genuine blank line (two Shift+Enters) still showed no
+visible gap in Signalstone — confirmed via the message's own edit box
+(which shows the raw stored `markdown`/`text`) that the blank line really
+was present in what Webex returned; editing is not run through
+`renderWebexMarkdown` at all, so this ruled out every part of rounds one
+and two, and the earlier outgoing round-one-adjacent fix (leaving a blank
+line's own newlines un-hard-break-encoded — see above), in one step. The
+bug was purely visual: `splitBlocks` already splits a blank line into two
+separate `<p>` elements correctly (structurally, this was never broken),
+but `.signalstone-message-text p`'s CSS only added 4px of margin between
+paragraphs — imperceptible next to the block's own 1.45 line-height, so
+a message with a blank line and one without looked identical. Fixed with
+`.signalstone-message-text p + p { margin-top: 1em; }`: two adjacent `<p>`
+elements can only ever occur when the source had a real blank line between
+them (every other block transition — into a list, quote, or code fence —
+does not require one, so this doesn't affect that spacing), so it's safe
+to give specifically that transition a distinctly larger gap without a
+false positive.
+
 ## Avatars and presence
 
 Both are fields already returned by `GET /people` — `avatar` (a Cisco-hosted
