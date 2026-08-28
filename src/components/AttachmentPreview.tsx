@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
 import { errorMessage, formatSize } from '../utils/format';
+import { useObsidianApp } from '../context/AppContext';
+import { ImageLightboxModal } from './ImageLightboxModal';
 
 type AttachmentStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -19,6 +21,7 @@ interface AttachmentMetadata {
  * preview/download is revoked on unmount and whenever it is replaced.
  */
 export function AttachmentPreview({ url, store, autoLoad = false }: { url: string; store: SignalstoneStore; autoLoad?: boolean }) {
+	const app = useObsidianApp();
 	const [status, setStatus] = useState<AttachmentStatus>('idle');
 	const [error, setError] = useState('Unable to retrieve attachment.');
 	const [objectUrl, setObjectUrl] = useState<string>();
@@ -81,7 +84,18 @@ export function AttachmentPreview({ url, store, autoLoad = false }: { url: strin
 
 	return (
 		<div className="signalstone-received-file">
-			{metadata.kind === 'image' && <img src={objectUrl} alt={metadata.filename} loading="lazy" />}
+			{metadata.kind === 'image' &&
+				(app ? (
+					<button
+						className="signalstone-image-trigger"
+						onClick={() => new ImageLightboxModal(app, objectUrl, metadata.filename).open()}
+						aria-label={`View ${metadata.filename} full size`}
+					>
+						<img src={objectUrl} alt={metadata.filename} loading="lazy" />
+					</button>
+				) : (
+					<img src={objectUrl} alt={metadata.filename} loading="lazy" />
+				))}
 			<div>
 				<span>{metadata.filename}</span>
 				<small>{metadata.sizeBytes === null ? metadata.contentType : `${formatSize(metadata.sizeBytes)} · ${metadata.contentType}`}</small>

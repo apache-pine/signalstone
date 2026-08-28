@@ -1,5 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import type { App } from 'obsidian';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
+import { AppProvider } from '../context/AppContext';
 import { SignalstoneErrorBoundary } from './ErrorBoundary';
 import { ConnectionScreen } from './ConnectionScreen';
 import { ConversationList } from './ConversationList';
@@ -7,11 +9,13 @@ import { Conversation } from './Conversation';
 import { NewMessage } from './NewMessage';
 import { NewSpace } from './NewSpace';
 
-export function SignalstoneApp({ store, openSettings }: { store: SignalstoneStore; openSettings: () => void }) {
+export function SignalstoneApp({ store, openSettings, app }: { store: SignalstoneStore; openSettings: () => void; app: App }) {
 	return (
-		<SignalstoneErrorBoundary>
-			<SignalstoneRouter store={store} openSettings={openSettings} />
-		</SignalstoneErrorBoundary>
+		<AppProvider value={app}>
+			<SignalstoneErrorBoundary>
+				<SignalstoneRouter store={store} openSettings={openSettings} />
+			</SignalstoneErrorBoundary>
+		</AppProvider>
 	);
 }
 

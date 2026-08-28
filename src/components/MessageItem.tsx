@@ -6,7 +6,9 @@ import type { SignalstoneStore } from '../services/SignalstoneStore';
 import type { TimeFormat } from '../settings/settings';
 import { formatDate, resolveSenderName } from '../utils/format';
 import { renderWebexMarkdown } from '../utils/webexMarkdown';
+import { extractCardFallback } from '../utils/adaptiveCard';
 import { AttachmentPreview } from './AttachmentPreview';
+import { AdaptiveCardFallback } from './AdaptiveCardFallback';
 
 export function MessageItem({
 	message,
@@ -74,6 +76,10 @@ export function MessageItem({
 				<div className="signalstone-message-text">{renderWebexMarkdown(message.markdown || message.text || '')}</div>
 			)}
 			{message.files?.map((url) => <AttachmentPreview url={url} store={store} autoLoad={autoLoadAttachments} key={url} />)}
+			{message.attachments?.map((attachment, index) => {
+				const fallback = extractCardFallback(attachment);
+				return fallback && <AdaptiveCardFallback content={fallback} key={index} />;
+			})}
 			{message.isEdited && <small>(edited)</small>}
 			{readBy && readBy.length > 0 && (
 				<small className="signalstone-read-receipt">Seen by {readBy.map((reader) => reader.personDisplayName || reader.personEmail || 'someone').join(', ')}</small>

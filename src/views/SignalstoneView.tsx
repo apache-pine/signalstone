@@ -10,6 +10,6 @@ export class SignalstoneView extends ItemView {
 	getViewType(): string { return SIGNALSTONE_VIEW; }
 	getDisplayText(): string { return 'Signalstone'; }
 	getIcon(): string { return 'radio'; }
-	async onOpen(): Promise<void> { this.contentEl.empty(); this.contentEl.addClass('signalstone-view'); this.root = createRoot(this.contentEl); this.root.render(<SignalstoneApp store={this.store} openSettings={this.openSettings} />); }
+	async onOpen(): Promise<void> { this.contentEl.empty(); this.contentEl.addClass('signalstone-view'); this.root = createRoot(this.contentEl); this.root.render(<SignalstoneApp store={this.store} openSettings={this.openSettings} app={this.app} />); }
 	async onClose(): Promise<void> { this.root?.unmount(); this.root = undefined; }
 }
