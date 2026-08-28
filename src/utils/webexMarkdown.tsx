@@ -173,22 +173,30 @@ function renderList(ordered: boolean, items: ListNode[], keyPrefix: string): Rea
 }
 
 /**
- * Within a block, a line ending in two-or-more spaces is a hard line break;
- * a bare newline is just a soft join (rendered as a space), matching
- * Webex's documented paragraph/line-break rules exactly, so a message
- * renders the same way here as it does in any other Webex client.
+ * Every newline within a block is a real line break — deliberately not
+ * Webex's documented "two trailing spaces for a hard break, a bare newline
+ * is just a soft join" Markdown rule. Two rounds of live evidence
+ * contradicted that rule for rendering: a message with no `markdown` field
+ * at all (a bot sending only `text`), and — the one that actually mattered
+ * — a real person pasting NYT Wordle's share text (one grid row per line,
+ * no deliberate hard-break markers) straight into Webex's own compose box,
+ * which populates `markdown` the same as anything else typed there. Since
+ * even a message that DOES have a `markdown` field turned out to need every
+ * newline treated as a real break, the field's presence was never a
+ * meaningful signal to begin with — this is unconditional for all incoming
+ * content now, not gated on anything. Trailing spaces (Webex's hard-break
+ * marker, still relevant for what Signalstone itself sends — see
+ * toWebexMarkdown) are stripped before display since they're no longer
+ * load-bearing for rendering, just incidental whitespace.
  */
 function renderParagraphLines(text: string, keyPrefix: string): ReactNode {
 	const lines = text.split('\n');
 	const nodes: ReactNode[] = [];
 
 	lines.forEach((line, index) => {
-		const isHardBreak = / {2,}$/.test(line);
 		const lineKey = `${keyPrefix}-l${index}`;
 		nodes.push(<Fragment key={lineKey}>{renderInline(line.replace(/ +$/, ''), lineKey)}</Fragment>);
-		if (index < lines.length - 1) {
-			nodes.push(isHardBreak ? <br key={`${lineKey}-br`} /> : ' ');
-		}
+		if (index < lines.length - 1) nodes.push(<br key={`${lineKey}-br`} />);
 	});
 
 	return nodes;

@@ -72,11 +72,26 @@ describe('renderWebexMarkdown', () => {
 		expect(mention.tagName).toBe('SPAN');
 	});
 
-	it('treats a line ending in two spaces as a hard break, and a bare newline as a soft join', () => {
+	// Deliberately not Webex's documented "two trailing spaces for a hard
+	// break, a bare newline is a soft join" Markdown rule — see the doc
+	// comment on renderParagraphLines in webexMarkdown.tsx for why: real
+	// evidence (a genuine markdown-field message, not just a plain-text one)
+	// contradicted it, so every newline is now unconditionally a real break.
+	it('treats every newline as a real line break, with or without a trailing-space hard-break marker', () => {
 		const { container } = renderMarkdown('Line 1  \nLine 2\nLine 3');
 		const paragraph = container.querySelector('p');
-		expect(paragraph?.querySelectorAll('br').length).toBe(1);
-		expect(paragraph?.textContent).toBe('Line 1Line 2 Line 3');
+		expect(paragraph?.querySelectorAll('br').length).toBe(2);
+		expect(paragraph?.textContent).toBe('Line 1Line 2Line 3');
+	});
+
+	it('renders a multi-line grid (e.g. a pasted NYT Wordle result, one row per line, no hard-break markers) with one row per line, not soft-joined onto one line', () => {
+		const { container } = renderMarkdown('Wordle 1,896 3/6\n\n⬛⬛🟧⬛🟧⬛🟩🟩\n⬛⬛🟩⬛🟩⬛🟩⬛\n🟩🟩🟩🟩🟩');
+		const paragraphs = container.querySelectorAll('p');
+		// The blank line after the header starts a new paragraph (block-level splitting).
+		expect(paragraphs).toHaveLength(2);
+		const gridParagraph = paragraphs[1];
+		expect(gridParagraph?.querySelectorAll('br').length).toBe(2); // 3 rows -> 2 breaks between them
+		expect(gridParagraph?.textContent).toBe('⬛⬛🟧⬛🟧⬛🟩🟩⬛⬛🟩⬛🟩⬛🟩⬛🟩🟩🟩🟩🟩');
 	});
 
 	it('never renders remote content as executable markup: a literal script tag stays visible text, not a DOM element', () => {
@@ -95,5 +110,27 @@ describe('toWebexMarkdown', () => {
 
 	it('normalizes pre-existing trailing whitespace rather than stacking more onto it', () => {
 		expect(toWebexMarkdown('line one   \nline two')).toBe('line one  \nline two');
+	});
+
+	// Regression test: a blank line (two Shift+Enters -- a paragraph break)
+	// used to also get the hard-break treatment, turning it into two lines
+	// that were each just two spaces. That did not survive Webex's server
+	// round-trip (a whitespace-only line commonly gets trimmed there), which
+	// silently collapsed the blank line back into a soft join once the sent
+	// message came back and was re-rendered.
+	it('leaves a blank line (a paragraph break) untouched, rather than hard-break-encoding it', () => {
+		expect(toWebexMarkdown('line one\n\nline two')).toBe('line one\n\nline two');
+	});
+
+	it('still hard-breaks a real Shift+Enter within one paragraph on either side of a blank-line paragraph break', () => {
+		expect(toWebexMarkdown('a\nb\n\nc\nd')).toBe('a  \nb\n\nc  \nd');
+	});
+
+	it('round-trips a blank line into two separate rendered paragraphs, matching what the composer showed while typing', () => {
+		const { container } = renderMarkdown(toWebexMarkdown('line one\n\nline two'));
+		const paragraphs = container.querySelectorAll('p');
+		expect(paragraphs).toHaveLength(2);
+		expect(paragraphs[0]?.textContent).toBe('line one');
+		expect(paragraphs[1]?.textContent).toBe('line two');
 	});
 });
