@@ -2,8 +2,6 @@
 
 Signalstone is an independent, lightweight Webex messaging client for an Obsidian sidebar. It keeps recent spaces, message history, composing, uploads, and basic message management close to your notes without persisting conversations into your vault.
 
-> Screenshot coming after live-service UI validation.
-
 ## Features
 
 - Token selection through Obsidian Secret Storage and `/people/me` validation
@@ -30,7 +28,7 @@ Every behavior below defaults to the plugin's original, unconfigured behavior â€
 
 ## Install and connect
 
-Signalstone requires Obsidian 1.13.0+ (for the declarative settings API and secret storage). Build it, then copy `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/plugins/signalstone/`. Enable it and select an Obsidian secret containing a Webex token in Signalstone settings.
+Signalstone requires Obsidian 1.13.0+ (for the declarative settings API and secret storage). Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/apache-pine/signalstone/releases/latest) into `<vault>/.obsidian/plugins/signalstone/` â€” or build from source (see Development below) and copy those same three files from the project root after `npm run build`. Enable it and select an Obsidian secret containing a Webex token in Signalstone settings.
 
 A Webex account is required. Personal developer tokens normally expire after about 12 hours and Cisco positions them for development/testing, not production authentication. Signalstone embeds no OAuth client secret.
 
@@ -52,4 +50,6 @@ Personal tokens must be replaced when expired. Loaded content remains in memory 
 
 Signalstone is unofficial and is not endorsed, sponsored, supported, or approved by Cisco/Webex or Obsidian. Their names describe compatibility; their logos are not used.
 
-No license has been selected. Choose one (MIT is a reasonable permissive option) before Community Plugin publication.
+## License
+
+[MIT](LICENSE)
