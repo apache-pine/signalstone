@@ -38,6 +38,26 @@ function SignalstoneRouter({ store, openSettings }: { store: SignalstoneStore; o
 		if (state.connection.status === 'connected' && state.spaces.length === 0) void store.loadSpaces();
 	}, [state.connection.status]);
 
+	// Creating a space or starting a DM both select the result as their last
+	// step (see SignalstoneStore.createSpace/startDirectMessage), and the
+	// caller then closes its own "New…" screen -- but each of those methods
+	// patches the store's state more than once along the way (space list,
+	// then selection, then the newly opened conversation's messages), and
+	// relying on that async chain's own final "now call onClose()" step to
+	// land after every one of those updates has actually committed turned
+	// out not to be reliable: the "New…" screen could still be flagged
+	// active once you back out of the space it had just created, so the
+	// same back button that should return to the recent list opened the
+	// creation screen again instead. Deriving "close it" from
+	// selectedSpaceId becoming set instead can't get out of sync with it,
+	// regardless of how many intermediate updates happened on the way there.
+	useEffect(() => {
+		if (state.selectedSpaceId) {
+			setStartingNewMessage(false);
+			setStartingNewSpace(false);
+		}
+	}, [state.selectedSpaceId]);
+
 	if (state.connection.status !== 'connected') {
 		return <ConnectionScreen state={state.connection.status} openSettings={openSettings} />;
 	}
