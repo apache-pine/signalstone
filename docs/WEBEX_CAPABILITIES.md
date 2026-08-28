@@ -315,7 +315,7 @@ custom dialogs including this exact case. Clicking an already-loaded image
 attachment now opens `ImageLightboxModal`, a small `Modal` subclass showing
 it at up to 90vw/80vh. Reuses the same object URL `AttachmentPreview` already
 created — no extra fetch. Escape and backdrop-click close it via `Modal`'s
-own built-in behavior; clicking the image does too, as a lightbox
+own built-in behavior; clicking the lightbox image does too, as a lightbox
 convenience.
 
 Needs Obsidian's `App` handle, which `Modal`'s constructor requires and
@@ -327,6 +327,38 @@ it's provided once via a new React context (`src/context/AppContext.tsx`)
 instead. Not unit tested, for the same reason as `spaceContextMenu.ts`
 (`Modal` has no runtime in the `obsidian` npm package's types-only build) —
 verified through the manual checklist instead.
+
+**Regression, reported live, two rounds — confirmed root cause: Obsidian's
+own button styling wins the cascade over a single custom class.** The
+original implementation made the click target by wrapping the inline
+`<img>` in a `<button>`, styled with an ordinary single-class CSS reset
+(`.signalstone-image-trigger { padding: 0; border: 0; background:
+transparent; ... }`, no `!important`). Round one: the image started
+rendering clipped partway through. Round two, after switching to an
+overlay approach instead of wrapping (below): the overlay button itself
+rendered as an opaque box covering the image instead of transparent —
+confirmed directly by deleting the button element in DevTools, which made
+the image display correctly underneath it. That's conclusive: Obsidian's
+or the active theme's own `button` styling has higher effective priority
+than a single class selector, for both sizing-related properties (round
+one) and `background` (round two).
+
+This codebase had already hit the same problem once before, for the
+conversation-list row buttons (`.signalstone-view .signalstone-space-list
+> button { ...!important; }`), and already established the fix there:
+`!important` on the specific properties Obsidian's own styling contests.
+The image trigger just wasn't using it yet.
+
+**Fix, in two parts.** First, decoupling: the click/keyboard target is a
+separate, absolutely-positioned `<button>` (`.signalstone-image-trigger`)
+overlaid on top of the image via a plain `<div>` wrapper
+(`.signalstone-image-wrapper`, `position: relative`) rather than wrapping
+the image — a `<div>` carries no default styling to fight in the first
+place, so the image renders exactly as it did before the lightbox feature
+existed regardless of what happens to the button layered on top of it.
+Second, the button's own reset (`padding`, `border`, `background`,
+`background-color`, `box-shadow`) now uses `!important`, matching the
+established pattern, so it's actually guaranteed to render invisible.
 
 ## Adaptive cards: read-only text extraction, deliberately not interactive
 
