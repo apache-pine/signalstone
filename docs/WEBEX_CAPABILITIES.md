@@ -15,7 +15,7 @@
 | Notifications | Obsidian `Notice` API | Off / direct messages + @mentions / direct messages only / all messages, for top-level messages from someone else in a space that isn't open; optional message preview; no sound. Mention detection uses the Message resource's own documented `mentionedPeople`/`mentionedGroups` fields (https://developer.webex.com/docs/api/v1/messages), not markdown parsing |
 | Read state | `memberships.on('seen', ...)` — public, live-wired; establishing/sending your own is private-only — see below | Receive-only, live-only: shows "Seen by …" on a message once a live receipt points at it |
 | Emoji reactions | Private/internal only — see below | Intentionally not implemented |
-| Adaptive cards | Public APIs exist | Safe fallback only |
+| Adaptive cards | Documented public feature (rendering is a client concern; submitting an action is `POST /attachment/actions`, not confirmed live) | Read-only text extraction, not interactive — see below |
 | GIPHY | Intentionally excluded | Not implemented |
 
 ## Why not render with Obsidian's own MarkdownRenderer?
@@ -226,6 +226,78 @@ among themselves too, not just dumped in arbitrary order at the top).
 Since this never touches Webex, it's also the one action in the whole
 right-click menu with no possible failure mode and no confirmation need —
 toggling it is instantaneous and always succeeds.
+
+## Enlarged image preview
+
+Obsidian has no dedicated "image viewer" API for an arbitrary (non-vault)
+image — checked the public type declarations directly, not just docs;
+`Modal` is the closest thing and the standard building block plugins use for
+custom dialogs including this exact case. Clicking an already-loaded image
+attachment now opens `ImageLightboxModal`, a small `Modal` subclass showing
+it at up to 90vw/80vh. Reuses the same object URL `AttachmentPreview` already
+created — no extra fetch. Escape and backdrop-click close it via `Modal`'s
+own built-in behavior; clicking the image does too, as a lightbox
+convenience.
+
+Needs Obsidian's `App` handle, which `Modal`'s constructor requires and
+nothing else in the component tree between `SignalstoneApp` and
+`AttachmentPreview` otherwise needs — threading it as an ordinary prop
+through Conversation/MessageList/MessageItem for that one leaf would mean
+changing four signatures for a dependency three of them don't care about, so
+it's provided once via a new React context (`src/context/AppContext.tsx`)
+instead. Not unit tested, for the same reason as `spaceContextMenu.ts`
+(`Modal` has no runtime in the `obsidian` npm package's types-only build) —
+verified through the manual checklist instead.
+
+## Adaptive cards: read-only text extraction, deliberately not interactive
+
+Unlike everything marked "private-only" elsewhere in this document, Adaptive
+Cards genuinely are a documented, public Webex feature — Cisco's own
+developer docs cover them, and there's a corresponding public
+`POST /attachment/actions` endpoint for submitting a card's collected input
+back to the bot that sent it (not confirmed against a live card in this
+session — worth a real test before relying on it). The gap here isn't a
+private API; it's that full support is a materially bigger feature than
+everything else in this document; see "What full interactivity would take"
+below.
+
+**What was actually happening before this pass**: nothing. `CardAttachment`
+existed as a parsed data type (`message.attachments`), but no component ever
+read it — a message containing only a card, no plain-text fallback, rendered
+completely empty. The previous "Safe fallback only" line in this doc's
+table was aspirational, not an accurate description of the code.
+
+**What's implemented now**: `src/utils/adaptiveCard.ts` walks a card's JSON
+body and extracts only its *static* text — `TextBlock` text, `FactSet`
+entries (as "Title: Value"), and an `Image`'s `altText` (never the image
+itself — its `url` can point anywhere, and fetching it would mean this app
+requesting from a third party the message's sender chose, not Webex, exactly
+the kind of thing "remote content is untrusted input" already rules out
+elsewhere in this codebase), recursing into `Container`/`ColumnSet`
+children. Action button titles (`Action.Submit`, `Action.OpenUrl`, etc.) are
+listed separately, as plain informational text — not rendered as buttons,
+so there's no ambiguity about what's actually clickable. Any element type
+this doesn't recognize (every kind of `Input.*`, `ActionSet`, `Media`,
+`RichTextBlock`, and anything not yet invented) is silently skipped rather
+than guessed at, since card JSON is sender-controlled, untrusted input,
+same as message text. Depth-limited recursion guards against a
+pathologically (or adversarially) nested card. Covered by
+`test/adaptive-card.test.ts`, including malformed-input and deep-nesting
+cases specifically because this parses untrusted data.
+
+**What full interactivity would take**, if ever revisited: actually
+rendering inputs and buttons as real UI, and wiring `Action.Submit` to
+`POST /attachment/actions`. That means either adopting Microsoft's own
+`adaptivecards` npm package (a real new dependency that would render
+untrusted, remote, sender-controlled JSON directly into the DOM — a
+different and larger security review than anything else in this codebase,
+which has otherwise avoided every third-party renderer in favor of
+hand-written ones specifically to keep that surface small and known) or
+hand-building a partial renderer for the small set of elements Webex bots
+commonly use. Meaningfully bigger than any single feature built so far —
+realistically its own multi-session effort, not an extension of this one.
+Not started; revisit if a real card workflow (an approval bot, a poll, a
+form) turns out to matter in practice.
 
 ## Space management: create, rename, leave
 
