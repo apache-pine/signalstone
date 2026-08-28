@@ -69,7 +69,10 @@
 .signalstone-attachment.is-error { color: var(--text-error); }
 .signalstone-received-file { margin-top: 8px; overflow: hidden; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); background: var(--background-secondary); }
 .signalstone-received-file img { display: block; width: 100%; max-height: 320px; object-fit: contain; background: var(--background-primary); }
-.signalstone-image-trigger { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
+/* A plain wrapper div (no theme/UA default styling to fight, unlike a button) keeps the image's own sizing completely untouched; the actual click/keyboard target is an invisible button overlaid on top of it, not wrapped around it. */
+.signalstone-image-wrapper { position: relative; }
+/* !important: Obsidian's/the theme's own button styling otherwise wins here (a single class isn't specific enough to beat it) -- confirmed live, the button rendered as an opaque box over the image instead of transparent. Same reason the conversation-list buttons above use !important. */
+.signalstone-image-trigger { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0 !important; border: 0 !important; background: transparent !important; background-color: transparent !important; box-shadow: none !important; cursor: zoom-in; }
 .signalstone-lightbox.modal { width: min(90vw, 900px); }
 .signalstone-lightbox-image { display: block; width: 100%; max-height: 80vh; object-fit: contain; cursor: zoom-out; }
 .signalstone-received-file > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; padding: 8px; }

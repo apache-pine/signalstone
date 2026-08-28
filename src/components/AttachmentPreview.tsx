@@ -86,13 +86,14 @@ export function AttachmentPreview({ url, store, autoLoad = false }: { url: strin
 		<div className="signalstone-received-file">
 			{metadata.kind === 'image' &&
 				(app ? (
-					<button
-						className="signalstone-image-trigger"
-						onClick={() => new ImageLightboxModal(app, objectUrl, metadata.filename).open()}
-						aria-label={`View ${metadata.filename} full size`}
-					>
+					<div className="signalstone-image-wrapper">
 						<img src={objectUrl} alt={metadata.filename} loading="lazy" />
-					</button>
+						<button
+							className="signalstone-image-trigger"
+							onClick={() => new ImageLightboxModal(app, objectUrl, metadata.filename).open()}
+							aria-label={`View ${metadata.filename} full size`}
+						/>
+					</div>
 				) : (
 					<img src={objectUrl} alt={metadata.filename} loading="lazy" />
 				))}
