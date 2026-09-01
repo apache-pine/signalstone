@@ -214,6 +214,11 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 						desc: 'The total across every conversation, on the icon that opens Signalstone.',
 						control: { type: 'toggle', key: 'showUnreadBadgeOnRibbonIcon' },
 					},
+					{
+						name: 'Show a "mark all as read" button',
+						desc: 'A button in the conversation list header that marks every conversation read at once. Turn off if the header feels cramped — the per-conversation button next to the jump-to-unread button still works either way.',
+						control: { type: 'toggle', key: 'showMarkAllReadButton' },
+					},
 				],
 			},
 			{
@@ -288,6 +293,7 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			case 'showUnreadMarkerInConversation': return settings.showUnreadMarkerInConversation;
 			case 'showUnreadJumpButton': return settings.showUnreadJumpButton;
 			case 'showUnreadBadgeOnRibbonIcon': return settings.showUnreadBadgeOnRibbonIcon;
+			case 'showMarkAllReadButton': return settings.showMarkAllReadButton;
 			default: return undefined;
 		}
 	}
@@ -319,6 +325,7 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			case 'showUnreadMarkerInConversation': settings.showUnreadMarkerInConversation = value as boolean; break;
 			case 'showUnreadJumpButton': settings.showUnreadJumpButton = value as boolean; break;
 			case 'showUnreadBadgeOnRibbonIcon': settings.showUnreadBadgeOnRibbonIcon = value as boolean; break;
+			case 'showMarkAllReadButton': settings.showMarkAllReadButton = value as boolean; break;
 			default: return;
 		}
 		await this.plugin.saveSettings();

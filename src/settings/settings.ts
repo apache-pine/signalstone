@@ -76,6 +76,8 @@ export interface SignalstoneSettings {
 	showUnreadJumpButton: boolean;
 	/** The total-unread-count badge on Signalstone's ribbon icon. */
 	showUnreadBadgeOnRibbonIcon: boolean;
+	/** The "mark all conversations as read" button in the conversation-list header. Its own toggle (rather than folding it into trackUnreadMessages) since it's specifically about header clutter, not tracking itself. */
+	showMarkAllReadButton: boolean;
 }
 
 export const DEFAULT_SETTINGS: SignalstoneSettings = {
@@ -105,6 +107,7 @@ export const DEFAULT_SETTINGS: SignalstoneSettings = {
 	showUnreadMarkerInConversation: true,
 	showUnreadJumpButton: true,
 	showUnreadBadgeOnRibbonIcon: true,
+	showMarkAllReadButton: true,
 };
 
 /**

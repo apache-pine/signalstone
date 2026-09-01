@@ -2,6 +2,7 @@ import { Menu, Notice } from 'obsidian';
 import type { Space } from '../models/Space';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
 import { errorMessage } from '../utils/format';
+import { showConfirmMenu } from './confirmMenu';
 
 /**
  * Right-click menu for a conversation-list row. Built on Obsidian's own
@@ -65,8 +66,12 @@ export function openSpaceContextMenu(
 				.setIcon('log-out')
 				.setWarning(true)
 				.onClick(() =>
-					showConfirmMenu(event, 'Leave this space?', 'Leave this space', () =>
-						void options.store.leaveSpace(space.id).catch((reason: unknown) => new Notice(errorMessage(reason, 'Unable to leave this space.'))),
+					showConfirmMenu(
+						event,
+						'Leave this space?',
+						'Leave this space',
+						() => void options.store.leaveSpace(space.id).catch((reason: unknown) => new Notice(errorMessage(reason, 'Unable to leave this space.'))),
+						{ icon: 'log-out', warning: true },
 					),
 				),
 		);
@@ -110,16 +115,6 @@ function addHideToggle(menu: Menu, space: Space, options: { isHidden: boolean; s
 				}),
 		);
 	}
-}
-
-/** A small second menu at the same position, so a destructive action always needs one extra deliberate click rather than acting on the first one. */
-function showConfirmMenu(event: MouseEvent, question: string, confirmLabel: string, onConfirm: () => void): void {
-	const menu = new Menu();
-	menu.addItem((item) => item.setTitle(question).setIsLabel(true));
-	menu.addSeparator();
-	menu.addItem((item) => item.setTitle('Cancel').setIcon('x'));
-	menu.addItem((item) => item.setTitle(confirmLabel).setIcon('log-out').setWarning(true).onClick(onConfirm));
-	menu.showAtMouseEvent(event);
 }
 
 async function copyOtherMemberEmail(spaceId: string, store: SignalstoneStore, selfId: string): Promise<void> {

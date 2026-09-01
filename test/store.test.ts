@@ -463,4 +463,73 @@ describe('SignalstoneStore', () => {
 		expect(store.getSnapshot().openedWithUnreadIds).toEqual([]);
 		expect(store.getSnapshot().unreadMessageIdsBySpace.room ?? []).toEqual([]);
 	});
+
+	it('marks a single conversation read on demand, clearing its badge and, if it is the one open, its divider too', async () => {
+		const { store, messages, realtime } = createStore(async () => ({ items: [], nextUrl: undefined }));
+
+		messages.get.mockResolvedValueOnce(message({ id: 'a', spaceId: 'room-b', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room-b', messageId: 'a' });
+		await flushMicrotasks();
+		await store.selectSpace('room-b');
+		expect(store.getSnapshot().openedWithUnreadIds).toEqual(['a']);
+
+		store.markSpaceAsRead('room-b');
+
+		expect(store.getSnapshot().openedWithUnreadIds).toEqual([]);
+		expect(store.getSnapshot().unreadMessageIdsBySpace['room-b'] ?? []).toEqual([]);
+	});
+
+	it('does not touch openedWithUnreadIds when marking a background space read that is not the one open', async () => {
+		const { store, messages, realtime } = createStore(async () => ({ items: [], nextUrl: undefined }));
+		await store.selectSpace('room'); // a different space is open
+
+		messages.get.mockResolvedValueOnce(message({ id: 'a', spaceId: 'room-b', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room-b', messageId: 'a' });
+		await flushMicrotasks();
+
+		store.markSpaceAsRead('room-b');
+
+		expect(store.getSnapshot().unreadMessageIdsBySpace['room-b'] ?? []).toEqual([]);
+		expect(store.getSnapshot().openedWithUnreadIds).toEqual([]);
+	});
+
+	it('marks every conversation read at once, across every space, from the header button', async () => {
+		const { store, messages, realtime } = createStore(async () => ({ items: [], nextUrl: undefined }));
+
+		messages.get.mockResolvedValueOnce(message({ id: 'a', spaceId: 'room-a', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room-a', messageId: 'a' });
+		messages.get.mockResolvedValueOnce(message({ id: 'b', spaceId: 'room-b', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room-b', messageId: 'b' });
+		await flushMicrotasks();
+		await store.selectSpace('room-a');
+		expect(store.getSnapshot().openedWithUnreadIds).toEqual(['a']);
+
+		store.markAllAsRead();
+
+		expect(store.getSnapshot().unreadMessageIdsBySpace).toEqual({});
+		expect(store.getSnapshot().openedWithUnreadIds).toEqual([]);
+	});
+
+	it('loads older pages automatically until the earliest unread message appears, for the jump-to-unread button', async () => {
+		const { store, messages } = createStore(async () => ({ items: [], nextUrl: undefined }));
+		messages.list.mockResolvedValueOnce({ items: [message({ id: 'newest', spaceId: 'room' })], nextUrl: 'page-2' });
+		await store.selectSpace('room');
+		expect(store.getSnapshot().messages.map((item) => item.id)).toEqual(['newest']);
+
+		messages.list.mockResolvedValueOnce({ items: [message({ id: 'older', spaceId: 'room' })], nextUrl: undefined });
+		const loaded = await store.loadUntilMessageLoaded('older');
+
+		expect(loaded).toBe(true);
+		expect(store.getSnapshot().messages.map((item) => item.id)).toEqual(['older', 'newest']);
+	});
+
+	it('gives up once there is nothing older left to load, rather than looping forever', async () => {
+		const { store, messages } = createStore(async () => ({ items: [], nextUrl: undefined }));
+		messages.list.mockResolvedValueOnce({ items: [message({ id: 'newest', spaceId: 'room' })], nextUrl: undefined }); // no next page at all
+		await store.selectSpace('room');
+
+		const loaded = await store.loadUntilMessageLoaded('never-arrives');
+
+		expect(loaded).toBe(false);
+	});
 });

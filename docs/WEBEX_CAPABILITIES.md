@@ -565,6 +565,48 @@ by the setting; multiple ids accumulating in arrival order; the
 snapshot-and-clear behavior on `selectSpace`; and cleanup of a deleted
 message from both sets.
 
+**Marking read on demand, without leaving the conversation.** The divider/
+badge/jump-button trio only ever clears on `selectSpace` — deliberately, so
+it survives the whole viewing session (see above). That leaves no way to
+dismiss it early other than leaving and reopening, which a live test
+surfaced as a real annoyance: `markSpaceAsRead(spaceId)` and `markAllAsRead()`
+were added directly to `SignalstoneStore` to close that gap, each wired to a
+small button behind Obsidian's own `Menu` for a one-extra-click confirmation
+(`components/confirmMenu.ts`, factored out of the existing space
+context-menu's "Leave this space…" confirm so both share one
+implementation) — one next to the jump-to-unread button for the open
+conversation, one in the conversation-list header for every conversation at
+once. The header button's visibility is governed only by its own setting,
+`showMarkAllReadButton` (for exactly the "header feels cramped" case it
+exists to avoid) — it's disabled (not hidden) while there's nothing to
+mark, rather than appearing and disappearing with the unread count.
+The first version tied its visibility to the unread count directly, on top
+of the setting; a live test then reported turning the setting back on as
+"not working" — the button really was gone, but because nothing happened
+to be unread at that exact moment, not because of the setting. Disabling
+instead of hiding makes the setting the only thing that controls whether
+the button is there at all, so toggling it always has a visible, immediate
+effect regardless of unread state. The per-conversation button has no such
+setting, since it only ever appears alongside the same unread state the
+jump button already does.
+
+**Auto-loading older pages for the jump button.** The divider/jump target is
+whichever unread message is earliest, but only what's already loaded can be
+searched — if more unread messages arrived than a single page holds (see
+`messagePageSize`), the true earliest one is older than what `selectSpace`'s
+initial fetch pulled in, and previously the button would just jump to
+whatever loaded unread message happened to be earliest, silently wrong.
+`loadUntilMessageLoaded(messageId)` fixes this by repeating the same
+`loadOlder()` step "Load older messages" already exposes, automatically,
+until that specific message is loaded or there's nothing left to load
+(capped at 10 pages, so a deleted target or an unusually large backlog can't
+loop forever) — Webex's pagination here is cursor-based, with the page size
+already baked into `nextMessagesUrl` from the original request, so there's
+no way to ask a single follow-up call for a bigger page instead; looping the
+existing step was the option actually available. Covered by
+`test/store.test.ts`: successfully loading enough pages to reach the target,
+and giving up cleanly once history runs out.
+
 ## Emoji reactions: confirmed private-only, not implemented
 
 Checked directly against the installed SDK source, not just documentation
