@@ -496,6 +496,75 @@ malformed payload correctly dropped) and `test/store.test.ts`
 (`recordReadReceipt`: recording, ignoring the current user's own, and
 ignoring an out-of-order older event).
 
+## Unread messages: local-only, session-only — no Webex API involved at all
+
+There is no public Webex endpoint for "unread" at the granularity this
+feature needs (see "Read/unread state" above — even the space-level
+`listWithReadStatus`/`updateLastSeen` methods that come closest are private,
+`webex.internal.conversation`-backed, not public REST). Rather than wait on
+that, unread tracking is implemented entirely client-side, in
+`SignalstoneStore`, using only data Signalstone already has: incoming
+messages' own `id` field (stable and unique — nothing about a message's
+content is ever logged for this) and the same open-space/hidden-space/
+own-message filtering `maybeNotify` already does for the existing Notice
+popup. It piggybacks on that method rather than duplicating its rules, so the
+in-app badge and the OS notification always agree on what counts.
+
+**Session-scoped by construction, not by a special reset step.** Unread
+state lives only in `SignalstoneState` (`unreadMessageIdsBySpace`,
+`openedWithUnreadIds`) — the same in-memory object as `readReceiptsBySpace`
+and `directoryInfoBySpaceId` — with no settings-persistence involvement at
+all. A plugin reload or Obsidian restart naturally starts from an empty
+object; there is nothing to explicitly clear.
+
+**Two-state design**, driven directly by the "don't remove the mark too
+soon" requirement: `unreadMessageIdsBySpace` is the live, growing set of
+unread message ids per space, appended to by `recordUnreadMessage` as
+messages arrive and cleared for a space the instant it's opened
+(`selectSpace`). `openedWithUnreadIds` is a *fixed snapshot* of what was
+unread at the moment a space was opened — it does not grow while the
+conversation stays open, and does not shrink as the reader scrolls past
+those messages, so the "N new messages" divider and the jump button's target
+both stay put and stay accurate for the whole viewing session, regardless of
+scroll position. A message that's deleted while still unread is scrubbed
+from both sets (`withoutUnreadMessageId`, wired into the existing
+`message-deleted` realtime handling) so it can't be jumped to or counted.
+
+All of it is gated behind `settings.trackUnreadMessages` (default on), with
+four further, independently-toggleable settings (all default on) controlling
+only presentation, never the underlying tracking: `showUnreadBadgeInRecents`
+(the count badge on a conversation-list row), `showUnreadMarkerInConversation`
+(the "N new messages" divider line in the transcript), `showUnreadJumpButton`
+(the sticky jump-to-first-unread button), and `showUnreadBadgeOnRibbonIcon`
+(the total-across-all-spaces badge on the ribbon icon). Turning the divider
+off doesn't disable the jump button: the divider's DOM element (and its ref)
+still renders as an invisible zero-size anchor (`.is-anchor-only`) purely so
+the jump button always has a real scroll target, even with its own visible
+styling suppressed — the two settings had to be decoupled at the DOM level,
+not just the CSS level, since the button is meaningless without something to
+scroll to.
+
+**No tab badge.** Checked directly against the installed type declarations
+(`node_modules/obsidian/obsidian.d.ts`) rather than assumed: `addRibbonIcon()`
+and `addStatusBarItem()` both explicitly return an `HTMLElement` documented as
+the caller's to modify, which is what the ribbon-icon badge uses. A
+workspace tab's own header, by contrast, has no equivalent public surface —
+`WorkspaceLeaf`/`View`/`ItemView` expose `getDisplayText()` for the title
+but nothing to force Obsidian to re-read it, and no badge/decoration method
+of any kind. Some community plugins reach into the tab header's internal DOM
+directly (e.g. `tabHeaderInnerTitleEl`) to fake this, but that's undocumented
+internal structure, not a stable API — consistent with this project's
+standing avoidance of undocumented surfaces elsewhere (see the
+`internal-plugin-*` packages ruled out for emoji reactions and read
+receipts above), so it was deliberately skipped in favor of the ribbon icon
+badge, which is fully public.
+
+Covered by tests in `test/store.test.ts`: unread ids recorded only for a
+background, non-thread, not-own, not-hidden message; tracking fully disabled
+by the setting; multiple ids accumulating in arrival order; the
+snapshot-and-clear behavior on `selectSpace`; and cleanup of a deleted
+message from both sets.
+
 ## Emoji reactions: confirmed private-only, not implemented
 
 Checked directly against the installed SDK source, not just documentation

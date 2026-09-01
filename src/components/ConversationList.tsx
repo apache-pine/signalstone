@@ -67,6 +67,7 @@ export function ConversationList({
 					const favorited = isFavorite(space.id);
 					const info = isDirect ? state.directoryInfoBySpaceId[space.id] : undefined;
 					const presence = isDirect && state.settings.showPresenceInRecents ? presenceInfo(info?.status) : undefined;
+					const unreadCount = state.settings.showUnreadBadgeInRecents ? (state.unreadMessageIdsBySpace[space.id]?.length ?? 0) : 0;
 					return (
 						<button
 							key={space.id}
@@ -93,6 +94,11 @@ export function ConversationList({
 									{isHidden && ' · Hidden'}
 								</small>
 							</div>
+							{unreadCount > 0 && (
+								<span className="signalstone-unread-badge" aria-label={`${unreadCount} unread message${unreadCount === 1 ? '' : 's'}`}>
+									{unreadCount > 99 ? '99+' : unreadCount}
+								</span>
+							)}
 						</button>
 					);
 				})}

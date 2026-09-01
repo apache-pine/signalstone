@@ -380,4 +380,87 @@ describe('SignalstoneStore', () => {
 		expect(store.getSnapshot().settings.favoriteSpaceIds).toEqual([]);
 		expect(persisted).toEqual([['room'], []]);
 	});
+
+	it('marks a background message unread by id, but not a thread reply, the user\'s own message, the currently open space, or a hidden space', async () => {
+		const { store, messages, memberships, realtime } = createStore(async () => ({ items: [space('Room A'), { ...space('Room B'), id: 'room-b' }], nextUrl: undefined }));
+		await store.loadSpaces();
+		await store.selectSpace('room'); // 'room' is now the open space
+
+		messages.get.mockResolvedValueOnce(message({ id: 'reply', spaceId: 'room-b', parentId: 'parent', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room-b', messageId: 'reply' });
+		messages.get.mockResolvedValueOnce(message({ id: 'mine', spaceId: 'room-b', personId: 'me' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room-b', messageId: 'mine' });
+		messages.get.mockResolvedValueOnce(message({ id: 'in-open-space', spaceId: 'room', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room', messageId: 'in-open-space' });
+
+		memberships.list.mockResolvedValueOnce({ items: [membership({ id: 'self-membership', spaceId: 'room-b', personId: 'me' })], nextUrl: undefined });
+		await store.hideSpace('room-b');
+		messages.get.mockResolvedValueOnce(message({ id: 'in-hidden-space', spaceId: 'room-b', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room-b', messageId: 'in-hidden-space' });
+		await flushMicrotasks();
+
+		expect(store.getSnapshot().unreadMessageIdsBySpace).toEqual({});
+
+		await store.unhideSpace('room-b');
+		messages.get.mockResolvedValueOnce(message({ id: 'background', spaceId: 'room-b', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room-b', messageId: 'background' });
+		await flushMicrotasks();
+
+		expect(store.getSnapshot().unreadMessageIdsBySpace).toEqual({ 'room-b': ['background'] });
+	});
+
+	it('does not track unread messages at all when the setting is off', async () => {
+		const { store, messages, realtime } = createStore(async () => ({ items: [], nextUrl: undefined }), { ...DEFAULT_SETTINGS, trackUnreadMessages: false });
+
+		messages.get.mockResolvedValueOnce(message({ id: 'background', spaceId: 'room', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room', messageId: 'background' });
+		await flushMicrotasks();
+
+		expect(store.getSnapshot().unreadMessageIdsBySpace).toEqual({});
+	});
+
+	it('accumulates multiple unread ids for the same background space in arrival order', async () => {
+		const { store, messages, realtime } = createStore(async () => ({ items: [], nextUrl: undefined }));
+
+		messages.get.mockResolvedValueOnce(message({ id: 'first', spaceId: 'room-b', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room-b', messageId: 'first' });
+		messages.get.mockResolvedValueOnce(message({ id: 'second', spaceId: 'room-b', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room-b', messageId: 'second' });
+		await flushMicrotasks();
+
+		expect(store.getSnapshot().unreadMessageIdsBySpace['room-b']).toEqual(['first', 'second']);
+	});
+
+	it('snapshots unread ids into openedWithUnreadIds and clears the live set the moment a space is opened', async () => {
+		const { store, messages, realtime } = createStore(async () => ({ items: [], nextUrl: undefined }));
+
+		messages.get.mockResolvedValueOnce(message({ id: 'pending', spaceId: 'room', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room', messageId: 'pending' });
+		await flushMicrotasks();
+		expect(store.getSnapshot().unreadMessageIdsBySpace.room).toEqual(['pending']);
+
+		await store.selectSpace('room');
+
+		expect(store.getSnapshot().unreadMessageIdsBySpace.room).toEqual([]);
+		expect(store.getSnapshot().openedWithUnreadIds).toEqual(['pending']);
+
+		// Opening a different, never-unread space doesn't inherit the snapshot.
+		await store.selectSpace('room-b');
+		expect(store.getSnapshot().openedWithUnreadIds).toEqual([]);
+	});
+
+	it('removes a deleted message from both the live unread set and the opened-with snapshot', async () => {
+		const { store, messages, realtime } = createStore(async () => ({ items: [], nextUrl: undefined }));
+
+		messages.get.mockResolvedValueOnce(message({ id: 'doomed', spaceId: 'room', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room', messageId: 'doomed' });
+		await flushMicrotasks();
+		await store.selectSpace('room');
+		expect(store.getSnapshot().openedWithUnreadIds).toEqual(['doomed']);
+
+		realtime.emit({ type: 'message-deleted', spaceId: 'room', messageId: 'doomed' });
+
+		expect(store.getSnapshot().openedWithUnreadIds).toEqual([]);
+		expect(store.getSnapshot().unreadMessageIdsBySpace.room ?? []).toEqual([]);
+	});
 });
