@@ -17,11 +17,25 @@ const NEAR_BOTTOM_THRESHOLD_PX = 80;
 export function MessageList({ state, store, selfId }: { state: SignalstoneState; store: SignalstoneStore; selfId: string }) {
 	const end = useRef<HTMLDivElement>(null);
 	const container = useRef<HTMLDivElement>(null);
+	const unreadDivider = useRef<HTMLDivElement>(null);
 	const wasNearBottom = useRef(true);
 	const threadParent = state.threadParentId ? state.messages.find((message) => message.id === state.threadParentId) : undefined;
 	const displayedMessages = state.threadParentId ? state.threadMessages : state.messages;
 	const space = state.spaces.find((item) => item.id === state.selectedSpaceId);
 	const { alwaysScrollToNewest, confirmBeforeDelete, autoLoadAttachments, timeFormat, messageDensity } = state.settings;
+
+	// Unread tracking is top-level-only (see SignalstoneStore.maybeNotify), so
+	// there's nothing to mark inside a thread. openedWithUnreadIds is a fixed
+	// snapshot taken when this conversation was opened (see selectSpace) — it
+	// doesn't grow as new messages arrive while open, and doesn't shrink as
+	// you scroll past it, so the divider stays put for the whole viewing
+	// session. The scroll target is whichever of those ids is actually
+	// loaded first; one that hasn't loaded yet (rare — would need more
+	// messages arriving while away than a single page holds) just doesn't
+	// have anywhere to point to yet.
+	const unreadIds = state.threadParentId ? new Set<string>() : new Set(state.openedWithUnreadIds);
+	const firstUnreadIndex = unreadIds.size > 0 ? displayedMessages.findIndex((message) => unreadIds.has(message.id)) : -1;
+	const unreadCount = state.openedWithUnreadIds.length;
 
 	// Group the space's known read receipts by the exact message each person
 	// last saw, so a message can show "Seen by …" only for whoever's receipt
@@ -61,6 +75,14 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 				wasNearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < NEAR_BOTTOM_THRESHOLD_PX;
 			}}
 		>
+			{!state.threadParentId && state.settings.showUnreadJumpButton && unreadCount > 0 && (
+				<button
+					className="signalstone-jump-to-unread"
+					onClick={() => unreadDivider.current?.scrollIntoView({ block: 'center' })}
+				>
+					↑ {unreadCount} new message{unreadCount === 1 ? '' : 's'}
+				</button>
+			)}
 			{threadParent && (
 				<div className="signalstone-thread-parent">
 					<MessageItem message={threadParent} own={threadParent.personId === selfId} store={store} space={space} confirmBeforeDelete={confirmBeforeDelete} autoLoadAttachments={autoLoadAttachments} timeFormat={timeFormat} readBy={readByMessageId.get(threadParent.id)} compact />
@@ -76,8 +98,17 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 					<p>{state.threadParentId ? 'No replies yet.' : 'No messages yet.'}</p>
 				</div>
 			)}
-			{displayedMessages.map((message) => (
+			{displayedMessages.map((message, index) => (
 				<Fragment key={message.id}>
+					{index === firstUnreadIndex && (
+						// Always rendered (as the jump button's scroll target) even when
+						// the visible divider setting is off, just without content/
+						// styling then -- otherwise turning the marker off would
+						// silently break the jump button too.
+						<div className={`signalstone-unread-divider${state.settings.showUnreadMarkerInConversation ? '' : ' is-anchor-only'}`} ref={unreadDivider}>
+							{state.settings.showUnreadMarkerInConversation && `${unreadCount} new message${unreadCount === 1 ? '' : 's'}`}
+						</div>
+					)}
 					<MessageItem
 						message={message}
 						own={message.personId === selfId}

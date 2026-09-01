@@ -27,7 +27,9 @@ export default class SignalstonePlugin extends Plugin {
 	private realtime!: RealtimeProvider;
 	private pollingFallback!: PollingFallback;
 	private unsubscribeAuth?: () => void;
+	private unsubscribeUnreadBadge?: () => void;
 	private uninstallXhrShim?: () => void;
+	private ribbonBadgeEl!: HTMLElement;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -38,7 +40,14 @@ export default class SignalstonePlugin extends Plugin {
 		this.uninstallXhrShim = installRequestUrlXhrShim(requestUrl);
 		this.buildServices();
 		this.registerView(SIGNALSTONE_VIEW, (leaf) => new SignalstoneView(leaf, this.store, () => new Notice('Open Obsidian settings → community plugins → Signalstone to configure your token.')));
-		this.addRibbonIcon('radio', 'Open Signalstone', () => void this.activateView());
+		const ribbonEl = this.addRibbonIcon('radio', 'Open Signalstone', () => void this.activateView());
+		// addRibbonIcon's returned element is documented as ours to modify --
+		// unlike a tab's own title/badge, which Obsidian has no public API to
+		// update at all (checked the type declarations directly; see
+		// docs/WEBEX_CAPABILITIES.md, "Unread messages").
+		ribbonEl.addClass('signalstone-ribbon-icon');
+		this.ribbonBadgeEl = ribbonEl.createSpan({ cls: 'signalstone-ribbon-badge' });
+		this.ribbonBadgeEl.hide();
 		this.addCommand({ id: 'open', name: 'Open', callback: () => void this.activateView() });
 		this.addCommand({ id: 'refresh', name: 'Refresh conversations', callback: () => void this.store.loadSpaces() });
 		this.addSettingTab(new SignalstoneSettingTab(this.app, this));
@@ -46,7 +55,7 @@ export default class SignalstonePlugin extends Plugin {
 		if (this.settings.openOnStartup) await this.activateView();
 	}
 
-	onunload(): void { this.unsubscribeAuth?.(); this.store.destroy(); void this.realtime.stop(); this.uninstallXhrShim?.(); }
+	onunload(): void { this.unsubscribeAuth?.(); this.unsubscribeUnreadBadge?.(); this.store.destroy(); void this.realtime.stop(); this.uninstallXhrShim?.(); }
 
 	async activateView(): Promise<void> {
 		let leaf = this.app.workspace.getLeavesOfType(SIGNALSTONE_VIEW)[0];
@@ -65,6 +74,7 @@ export default class SignalstonePlugin extends Plugin {
 	applyLiveSettings(): void {
 		this.store.setSettings(this.settings);
 		this.pollingFallback.setIntervals(POLLING_FREQUENCY_MS[this.settings.pollingFrequency].activeConversationIntervalMs, POLLING_FREQUENCY_MS[this.settings.pollingFrequency].spaceListIntervalMs);
+		this.updateRibbonBadge();
 	}
 	async rebuildConnection(): Promise<void> { this.unsubscribeAuth?.(); this.store.destroy(); await this.realtime.stop(); this.buildServices(); await this.auth.validate(); this.app.workspace.detachLeavesOfType(SIGNALSTONE_VIEW); await this.activateView(); }
 
@@ -90,6 +100,19 @@ export default class SignalstonePlugin extends Plugin {
 		this.store.notify = (message) => this.showNotification(message);
 		this.store.onSettingsChanged = (settings) => { this.settings = settings; void this.saveSettings(); };
 		this.unsubscribeAuth = this.auth.onStateChange((state) => { this.store.setConnection(state); if (state.status === 'connected') { void this.realtime.start(); void this.store.loadSpaces(); } else { void this.realtime.stop(); } });
+		this.unsubscribeUnreadBadge?.();
+		this.unsubscribeUnreadBadge = this.store.subscribe(() => this.updateRibbonBadge());
+		this.updateRibbonBadge();
+	}
+
+	/** The total unread count across every space, on the ribbon icon — see docs/WEBEX_CAPABILITIES.md, "Unread messages". */
+	private updateRibbonBadge(): void {
+		if (!this.ribbonBadgeEl) return;
+		if (!this.settings.showUnreadBadgeOnRibbonIcon) { this.ribbonBadgeEl.hide(); return; }
+		const total = Object.values(this.store.getSnapshot().unreadMessageIdsBySpace).reduce((sum, ids) => sum + ids.length, 0);
+		if (total === 0) { this.ribbonBadgeEl.hide(); return; }
+		this.ribbonBadgeEl.setText(total > 99 ? '99+' : String(total));
+		this.ribbonBadgeEl.show();
 	}
 
 	/**

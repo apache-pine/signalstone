@@ -187,6 +187,37 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			},
 			{
 				type: 'group',
+				heading: 'Unread messages',
+				items: [
+					{
+						name: 'Track unread messages',
+						desc: 'Local to this device and this Obsidian session only — Webex has no unread-tracking API to sync from, so nothing here persists across a restart, and every conversation starts fresh as read. Turning this off disables every setting below, and stops counting entirely.',
+						control: { type: 'toggle', key: 'trackUnreadMessages' },
+					},
+					{
+						name: 'Show an unread count in the conversation list',
+						desc: 'A number badge on each conversation with unread messages.',
+						control: { type: 'toggle', key: 'showUnreadBadgeInRecents' },
+					},
+					{
+						name: 'Mark unread messages in the conversation',
+						desc: 'A "N new messages" divider above the first message you have not seen yet, for as long as you have that conversation open.',
+						control: { type: 'toggle', key: 'showUnreadMarkerInConversation' },
+					},
+					{
+						name: 'Show a jump-to-unread button',
+						desc: 'Scrolls straight to the divider above.',
+						control: { type: 'toggle', key: 'showUnreadJumpButton' },
+					},
+					{
+						name: 'Show an unread count on the ribbon icon',
+						desc: 'The total across every conversation, on the icon that opens Signalstone.',
+						control: { type: 'toggle', key: 'showUnreadBadgeOnRibbonIcon' },
+					},
+				],
+			},
+			{
+				type: 'group',
 				heading: 'Advanced',
 				items: [
 					{
@@ -252,6 +283,11 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			case 'showAvatarsInConversations': return settings.showAvatarsInConversations;
 			case 'showPresenceInConversations': return settings.showPresenceInConversations;
 			case 'showHiddenConversations': return settings.showHiddenConversations;
+			case 'trackUnreadMessages': return settings.trackUnreadMessages;
+			case 'showUnreadBadgeInRecents': return settings.showUnreadBadgeInRecents;
+			case 'showUnreadMarkerInConversation': return settings.showUnreadMarkerInConversation;
+			case 'showUnreadJumpButton': return settings.showUnreadJumpButton;
+			case 'showUnreadBadgeOnRibbonIcon': return settings.showUnreadBadgeOnRibbonIcon;
 			default: return undefined;
 		}
 	}
@@ -278,6 +314,11 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			case 'showAvatarsInConversations': settings.showAvatarsInConversations = value as boolean; break;
 			case 'showPresenceInConversations': settings.showPresenceInConversations = value as boolean; break;
 			case 'showHiddenConversations': settings.showHiddenConversations = value as boolean; break;
+			case 'trackUnreadMessages': settings.trackUnreadMessages = value as boolean; break;
+			case 'showUnreadBadgeInRecents': settings.showUnreadBadgeInRecents = value as boolean; break;
+			case 'showUnreadMarkerInConversation': settings.showUnreadMarkerInConversation = value as boolean; break;
+			case 'showUnreadJumpButton': settings.showUnreadJumpButton = value as boolean; break;
+			case 'showUnreadBadgeOnRibbonIcon': settings.showUnreadBadgeOnRibbonIcon = value as boolean; break;
 			default: return;
 		}
 		await this.plugin.saveSettings();

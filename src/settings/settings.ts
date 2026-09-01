@@ -60,6 +60,22 @@ export interface SignalstoneSettings {
 	 * Signalstone's own persisted settings, keyed by space id.
 	 */
 	favoriteSpaceIds: string[];
+	/**
+	 * Local-only, session-scoped read tracking (no public Webex API for this
+	 * at all — see docs/WEBEX_CAPABILITIES.md, "Unread messages"). Master
+	 * toggle for whether it runs at all; the other four each control one
+	 * independent place it shows up, so e.g. the ribbon badge can be on
+	 * without the in-conversation divider, or vice versa.
+	 */
+	trackUnreadMessages: boolean;
+	/** The count badge on each conversation-list row. */
+	showUnreadBadgeInRecents: boolean;
+	/** The "N new messages" divider line inside an open conversation. */
+	showUnreadMarkerInConversation: boolean;
+	/** The button that scrolls to the divider. */
+	showUnreadJumpButton: boolean;
+	/** The total-unread-count badge on Signalstone's ribbon icon. */
+	showUnreadBadgeOnRibbonIcon: boolean;
 }
 
 export const DEFAULT_SETTINGS: SignalstoneSettings = {
@@ -84,6 +100,11 @@ export const DEFAULT_SETTINGS: SignalstoneSettings = {
 	showPresenceInConversations: false,
 	showHiddenConversations: false,
 	favoriteSpaceIds: [],
+	trackUnreadMessages: true,
+	showUnreadBadgeInRecents: true,
+	showUnreadMarkerInConversation: true,
+	showUnreadJumpButton: true,
+	showUnreadBadgeOnRibbonIcon: true,
 };
 
 /**

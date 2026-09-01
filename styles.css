@@ -17,6 +17,8 @@
 .signalstone-view .signalstone-space-list > button > div > span { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .signalstone-space-title { overflow: hidden; min-width: 0; color: var(--text-normal); font-weight: var(--font-semibold); line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 .signalstone-favorite-star { flex-shrink: 0; color: var(--color-yellow); }
+/* Deliberately distinct from .signalstone-presence in every dimension (size, shape/content, color, position) so the two read as unrelated even shown together: a numbered accent-colored pill at the row's far right, versus a small semantic-colored dot inline with the title. */
+.signalstone-unread-badge { flex-shrink: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--interactive-accent); color: var(--text-on-accent); font-size: var(--font-ui-smaller); font-weight: var(--font-semibold); line-height: 18px; text-align: center; }
 .signalstone-view .signalstone-space-list > button > div > small { display: block; width: 100%; overflow: hidden; color: var(--text-muted); line-height: 1.2; text-align: left !important; text-overflow: ellipsis; white-space: nowrap; }
 .signalstone-empty, .signalstone-empty-list { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
 .signalstone-empty { height: 100%; }
@@ -42,6 +44,10 @@
 .signalstone-member-actions button { font-size: var(--font-ui-smaller); }
 .signalstone-messages { flex: 1; overflow: auto; padding: 8px; }
 .signalstone-load-older { display: block; margin: 4px auto 12px; }
+.signalstone-jump-to-unread { position: sticky; top: 0; z-index: 1; display: block; width: 100%; margin-bottom: 6px; padding: 6px 10px; border: 0; border-radius: var(--radius-s); background: var(--interactive-accent); color: var(--text-on-accent); font-size: var(--font-ui-small); font-weight: var(--font-semibold); text-align: center; }
+.signalstone-jump-to-unread:hover { background: var(--interactive-accent-hover); }
+.signalstone-unread-divider { margin: 8px 0; padding: 3px 8px; border-radius: var(--radius-s); background: var(--background-modifier-hover); color: var(--interactive-accent); font-size: var(--font-ui-smaller); font-weight: var(--font-semibold); text-align: center; }
+.signalstone-unread-divider.is-anchor-only { margin: 0; height: 0; padding: 0; overflow: hidden; }
 .signalstone-message { position: relative; padding: 8px; margin: 3px 0; border-radius: var(--radius-s); overflow-wrap: anywhere; }
 .signalstone-message:hover { background: var(--background-secondary); }
 .signalstone-messages.is-compact .signalstone-message { padding: 3px 8px; margin: 0; border-radius: 0; }
@@ -128,4 +134,7 @@
 .signalstone-presence.is-busy { background: var(--color-red); }
 .signalstone-presence.is-away { background: var(--color-yellow); }
 .signalstone-form-error { margin: 0; color: var(--text-error); }
+/* Ribbon icon lives in Obsidian's global side-ribbon, outside .signalstone-app -- see main.ts, updateRibbonBadge. */
+.signalstone-ribbon-icon { position: relative; }
+.signalstone-ribbon-badge { position: absolute; top: 0; right: 0; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 999px; background: var(--interactive-accent); color: var(--text-on-accent); font-size: 9px; font-weight: var(--font-semibold); line-height: 14px; text-align: center; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .signalstone-app * { scroll-behavior: auto !important; transition: none !important; } }

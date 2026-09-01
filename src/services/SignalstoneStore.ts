@@ -38,6 +38,24 @@ export interface SignalstoneState {
 	directoryInfoBySpaceId: Record<string, DirectoryInfo>;
 	/** Every space the authenticated user has hidden, by spaceId — including ones currently filtered out of `spaces` (see loadSpaces). Always kept current regardless of settings, since it also gates notifications. */
 	hiddenSpaceIds: Record<string, boolean>;
+	/**
+	 * Message ids received in a background space since it was last opened —
+	 * local-only, session-only (never persisted; resets to empty on every
+	 * launch). Cleared for a space the moment it's opened (see selectSpace);
+	 * this is what the conversation list's unread badge reads. Only
+	 * populated while settings.trackUnreadMessages is on.
+	 */
+	unreadMessageIdsBySpace: Record<string, string[]>;
+	/**
+	 * A snapshot of unreadMessageIdsBySpace taken for the currently open
+	 * space at the moment it was opened — stays fixed for the whole viewing
+	 * session (does not grow as new messages arrive while open, does not
+	 * shrink as you scroll past them), so the "N new messages" divider and
+	 * jump button have a stable target regardless of how far you scroll.
+	 * Replaced with a fresh snapshot (or cleared to []) every time
+	 * selectSpace runs.
+	 */
+	openedWithUnreadIds: string[];
 	nextMessagesUrl?: string;
 	loading: boolean;
 	error?: string;
@@ -81,7 +99,7 @@ export class SignalstoneStore {
 		private readonly membershipsApi: Pick<MembershipsApi, 'list' | 'add' | 'setModerator' | 'setHidden' | 'remove'>,
 		settings: SignalstoneSettings = DEFAULT_SETTINGS,
 	) {
-		this.state = { connection, realtime: realtimeProvider.status, realtimeDetail: realtimeProvider.detail, settings, spaces: [], selectedSpaceId: null, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, readReceiptsBySpace: {}, directoryInfoBySpaceId: {}, hiddenSpaceIds: {}, loading: false };
+		this.state = { connection, realtime: realtimeProvider.status, realtimeDetail: realtimeProvider.detail, settings, spaces: [], selectedSpaceId: null, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, readReceiptsBySpace: {}, directoryInfoBySpaceId: {}, hiddenSpaceIds: {}, unreadMessageIdsBySpace: {}, openedWithUnreadIds: [], loading: false };
 		this.unsubscribeRealtime = realtimeProvider.onEvent((event) => void this.handleRealtime(event));
 		this.unsubscribeRealtimeStatus = realtimeProvider.onStatusChange((realtime) => this.patch({ realtime, realtimeDetail: realtimeProvider.detail }));
 	}
@@ -150,7 +168,14 @@ export class SignalstoneStore {
 		const generation = ++this.requestGeneration;
 		this.realtimeProvider.setActiveView(spaceId ? { spaceId } : null);
 		this.knownThreadReplies.clear();
-		this.patch({ selectedSpaceId: spaceId, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, nextMessagesUrl: undefined, error: undefined });
+		// Snapshot whatever was unread for this space into openedWithUnreadIds
+		// (the stable, viewing-session-long target for the divider/jump
+		// button), then clear the space's own entry immediately -- that's
+		// what makes the conversation list's badge disappear right away, the
+		// same instant Signalstone considers the space "read".
+		const openedWithUnreadIds = spaceId ? (this.state.unreadMessageIdsBySpace[spaceId] ?? []) : [];
+		const unreadMessageIdsBySpace = spaceId && openedWithUnreadIds.length > 0 ? { ...this.state.unreadMessageIdsBySpace, [spaceId]: [] } : this.state.unreadMessageIdsBySpace;
+		this.patch({ selectedSpaceId: spaceId, messages: [], threadParentId: null, threadMessages: [], threadReplyCounts: {}, threadRepliesByParent: {}, nextMessagesUrl: undefined, error: undefined, openedWithUnreadIds, unreadMessageIdsBySpace });
 		if (!spaceId) return;
 		this.patch({ loading: true });
 		try {
@@ -357,7 +382,12 @@ export class SignalstoneStore {
 			// note below) — filtering an array for an id it doesn't contain is a
 			// harmless no-op, so it's simplest and safest to just always try.
 			this.removeKnownThreadReply(event.messageId);
-			this.patch({ messages: this.state.messages.filter((message) => message.id !== event.messageId), threadMessages: this.state.threadMessages.filter((message) => message.id !== event.messageId) });
+			this.patch({
+				messages: this.state.messages.filter((message) => message.id !== event.messageId),
+				threadMessages: this.state.threadMessages.filter((message) => message.id !== event.messageId),
+				unreadMessageIdsBySpace: this.withoutUnreadMessageId(this.state.unreadMessageIdsBySpace, event.messageId),
+				openedWithUnreadIds: this.state.openedWithUnreadIds.filter((id) => id !== event.messageId),
+			});
 			return;
 		}
 
@@ -411,15 +441,40 @@ export class SignalstoneStore {
 		}
 	}
 
-	/** Notifies for a top-level message from someone else, in a space that isn't the one currently open. */
+	/**
+	 * Notifies for, and marks unread, a top-level message from someone else
+	 * in a space that isn't the one currently open. Notifications and unread
+	 * tracking are independently configurable (a Notice popup and an in-app
+	 * badge are different concerns), so each is gated by its own setting
+	 * here rather than one implying the other.
+	 */
 	private maybeNotify(message: WebexMessage): void {
 		if (message.parentId) return;
 		const selfId = this.state.connection.status === 'connected' ? this.state.connection.person.id : undefined;
 		if (!selfId || message.personId === selfId) return;
 		if (message.spaceId === this.state.selectedSpaceId) return;
 		if (this.state.hiddenSpaceIds[message.spaceId]) return;
+		if (this.state.settings.trackUnreadMessages) this.recordUnreadMessage(message.spaceId, message.id);
 		debugLog('store', 'Notifying for background message', { messageId: message.id, spaceId: message.spaceId, hasNotifyHandler: Boolean(this.notify) });
 		this.notify?.(message);
+	}
+
+	/** Local-only, session-only — see docs/WEBEX_CAPABILITIES.md, "Unread messages". */
+	private recordUnreadMessage(spaceId: string, messageId: string): void {
+		const existing = this.state.unreadMessageIdsBySpace[spaceId] ?? [];
+		if (existing.includes(messageId)) return;
+		this.patch({ unreadMessageIdsBySpace: { ...this.state.unreadMessageIdsBySpace, [spaceId]: [...existing, messageId] } });
+	}
+
+	/** A deleted message shouldn't keep counting (or showing) as unread. */
+	private withoutUnreadMessageId(bySpace: Record<string, string[]>, messageId: string): Record<string, string[]> {
+		let changed = false;
+		const next: Record<string, string[]> = {};
+		for (const [spaceId, ids] of Object.entries(bySpace)) {
+			if (ids.includes(messageId)) { changed = true; next[spaceId] = ids.filter((id) => id !== messageId); }
+			else next[spaceId] = ids;
+		}
+		return changed ? next : bySpace;
 	}
 
 	private async refreshMessages(): Promise<void> {
