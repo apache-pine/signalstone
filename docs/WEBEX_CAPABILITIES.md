@@ -360,6 +360,25 @@ Second, the button's own reset (`padding`, `border`, `background`,
 `background-color`, `box-shadow`) now uses `!important`, matching the
 established pattern, so it's actually guaranteed to render invisible.
 
+**Unloading an image after viewing it.** `AttachmentPreview` already starts
+every attachment idle (click-to-load, unless "Automatically load
+attachments" is on) rather than fetching eagerly, specifically so opening a
+conversation doesn't download every image in it. That covers not loading in
+the first place, but not the requested "I looked at it, now put it back"
+case — previously the only way back to the click-to-load state was leaving
+and reopening the conversation, which resets every attachment in it, not
+just the one you were done with. `unload()` reverts a single image's own
+component state back to `idle` (`AttachmentPreview` tracks `status`/
+`objectUrl`/`metadata` locally, per attachment instance, not in
+`SignalstoneStore` — there was already nothing shared to update) and revokes
+its object URL, so this is a genuine release of the decoded image data, not
+just a CSS hide — a later "Load attachment" click re-fetches it from Webex
+from scratch. Surfaced as a small "🙈 Unload" button next to Save, images
+only (the request was specifically about pictures/GIFs, not documents), and
+needs no setting of its own for the same reason Save doesn't: it's a
+one-off manual action on an already-loaded item, not passive UI that could
+clutter an idle conversation.
+
 ## Adaptive cards: read-only text extraction, deliberately not interactive
 
 Unlike everything marked "private-only" elsewhere in this document, Adaptive
