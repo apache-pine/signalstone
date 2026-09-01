@@ -20,6 +20,22 @@ import type { WebexMessage } from './models/Message';
 import { debugLog, setDebugLogging } from './utils/logger';
 import { resolveSenderName } from './utils/format';
 
+/**
+ * The shape of `app.setting`, Obsidian's internal settings-modal controller
+ * -- not part of the public `obsidian` package's type declarations at all
+ * (confirmed directly against them; there is no documented way to open the
+ * Settings modal at all, to any tab, general or plugin-specific). Used
+ * anyway in openPluginSettings() below because it's the de facto standard
+ * nearly every community plugin relies on for this exact "take me to my
+ * settings" button, and there's no public alternative whatsoever -- unlike
+ * the tab-badge case (see docs/WEBEX_CAPABILITIES.md, "Unread messages"),
+ * where a fully public alternative (the ribbon icon) existed instead.
+ */
+interface InternalSettingModal {
+	open: () => void;
+	openTabById: (id: string) => void;
+}
+
 export default class SignalstonePlugin extends Plugin {
 	settings: SignalstoneSettings = DEFAULT_SETTINGS;
 	auth!: PersonalTokenAuthProvider;
@@ -39,7 +55,7 @@ export default class SignalstonePlugin extends Plugin {
 		// concerns cleanly ordered regardless of connection state).
 		this.uninstallXhrShim = installRequestUrlXhrShim(requestUrl);
 		this.buildServices();
-		this.registerView(SIGNALSTONE_VIEW, (leaf) => new SignalstoneView(leaf, this.store, () => new Notice('Open Obsidian settings → community plugins → Signalstone to configure your token.')));
+		this.registerView(SIGNALSTONE_VIEW, (leaf) => new SignalstoneView(leaf, this.store, () => this.openPluginSettings()));
 		const ribbonEl = this.addRibbonIcon('radio', 'Open Signalstone', () => void this.activateView());
 		// addRibbonIcon's returned element is documented as ours to modify --
 		// unlike a tab's own title/badge, which Obsidian has no public API to
@@ -65,6 +81,26 @@ export default class SignalstonePlugin extends Plugin {
 			await leaf.setViewState({ type: SIGNALSTONE_VIEW, active: true });
 		}
 		await this.app.workspace.revealLeaf(leaf);
+	}
+
+	/**
+	 * Opens Obsidian's Settings modal directly to Signalstone's own tab, for
+	 * the ConnectionScreen button shown when no token is configured yet. See
+	 * InternalSettingModal above for why this reaches into an undocumented
+	 * API, and why that's the deliberate choice here. Falls back to the
+	 * original Notice-only behavior if `app.setting` isn't there at all --
+	 * e.g. a future Obsidian release that removes or renames it -- so the
+	 * button degrades to "still tells you where to go" rather than doing
+	 * nothing.
+	 */
+	private openPluginSettings(): void {
+		const setting = (this.app as unknown as { setting?: InternalSettingModal }).setting;
+		if (setting) {
+			setting.open();
+			setting.openTabById(this.manifest.id);
+		} else {
+			new Notice('Open Obsidian settings → community plugins → Signalstone to configure your token.');
+		}
 	}
 
 	async loadSettings(): Promise<void> { this.settings = { ...DEFAULT_SETTINGS, ...(await this.loadData() as Partial<SignalstoneSettings> | null) }; }
