@@ -379,6 +379,33 @@ needs no setting of its own for the same reason Save doesn't: it's a
 one-off manual action on an already-loaded item, not passive UI that could
 clutter an idle conversation.
 
+## Opening Obsidian's own Settings modal: one deliberate exception to public-API-only
+
+The "Open settings" button on ConnectionScreen (shown before a token is
+configured) originally just showed a Notice explaining where to go, rather
+than actually navigating there — reported live as a real UX gap. Checked
+directly against the public `obsidian` package's type declarations: `App`
+has no `setting` property at all, and there is no documented way to open
+the Settings modal from plugin code — not to a specific tab, not even
+generally. The only way to do it is `app.setting.open()` /
+`app.setting.openTabById(id)`, an internal, untyped object that exists at
+runtime but isn't part of the public API surface.
+
+Every other place this document rules out an undocumented surface
+(`internal-plugin-*` for reactions/read-receipts, `tabHeaderInnerTitleEl`
+for a tab badge), a fully public alternative covered the actual need
+instead, so avoiding the internal API cost nothing. Here there simply isn't
+one — no public API opens Settings at all, to any tab — and `app.setting`
+is also, unusually for an internal API, the de facto standard nearly every
+community plugin already relies on for this exact button, not an obscure
+trick. That combination (no public alternative exists, and the workaround
+is already the ecosystem norm) is why this is the one deliberate exception:
+`openPluginSettings()` in `main.ts` uses it, behind a small
+`InternalSettingModal` interface documenting exactly why, and falls back to
+the original Notice if `app.setting` isn't present at all (e.g. a future
+Obsidian release removes or renames it) so the button degrades gracefully
+rather than doing nothing.
+
 ## Adaptive cards: read-only text extraction, deliberately not interactive
 
 Unlike everything marked "private-only" elsewhere in this document, Adaptive
