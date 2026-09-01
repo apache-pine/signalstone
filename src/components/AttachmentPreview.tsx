@@ -51,6 +51,23 @@ export function AttachmentPreview({ url, store, autoLoad = false }: { url: strin
 		}
 	};
 
+	/**
+	 * Reverts an image back to its click-to-load state -- the object URL is
+	 * revoked, so the decoded image data really is released (not just hidden
+	 * behind CSS); a later "Load attachment" click re-fetches it from Webex
+	 * from scratch, same as the very first load. Images only: this exists for
+	 * "let me glance at that GIF, then get it out of the way again" without
+	 * leaving and reopening the conversation, not for general attachments.
+	 */
+	const unload = () => {
+		setObjectUrl((previous) => {
+			if (previous) URL.revokeObjectURL(previous);
+			return undefined;
+		});
+		setMetadata(undefined);
+		setStatus('idle');
+	};
+
 	useEffect(() => {
 		// Fires once on mount only: an explicit opt-in kicks off exactly one
 		// automatic load attempt. A failed auto-load still lands on the normal
@@ -100,9 +117,16 @@ export function AttachmentPreview({ url, store, autoLoad = false }: { url: strin
 			<div>
 				<span>{metadata.filename}</span>
 				<small>{metadata.sizeBytes === null ? metadata.contentType : `${formatSize(metadata.sizeBytes)} · ${metadata.contentType}`}</small>
-				<a href={objectUrl} download={metadata.filename}>
-					Save
-				</a>
+				<div className="signalstone-received-file-actions">
+					<a href={objectUrl} download={metadata.filename}>
+						Save
+					</a>
+					{metadata.kind === 'image' && (
+						<button className="signalstone-unload-image" onClick={unload} aria-label={`Unload ${metadata.filename}`} title="Revert to click-to-load">
+							🙈 Unload
+						</button>
+					)}
+				</div>
 			</div>
 		</div>
 	);

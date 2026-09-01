@@ -8,7 +8,7 @@ Signalstone is an independent, lightweight Webex messaging client for an Obsidia
 - Recent direct/group spaces, filtering, and paginated history
 - Plain text/Webex Markdown sending and one-file upload with paste/drag-and-drop
 - Safe text/link/code rendering without injecting Webex HTML
-- Threaded replies, editing/deleting own messages, and inline file/image previews (click a loaded image for a full-size view)
+- Threaded replies, editing/deleting own messages, and inline file/image previews (click a loaded image for a full-size view, or unload it back to click-to-load once you're done looking)
 - Local, session-only unread tracking at the individual message level — a count badge per conversation, a "new messages" divider and jump button inside it (which loads older pages automatically if needed to reach it), and a badge on the ribbon icon, each independently toggleable; mark a single conversation or everything read on demand, each behind a confirmation
 - Official Webex Browser SDK events with automatic conservative polling fallback
 - Responsive theme-native sidebar, offline states, and in-memory drafts
