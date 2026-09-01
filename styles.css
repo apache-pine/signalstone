@@ -5,6 +5,7 @@
 .signalstone-header-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .signalstone-app button { cursor: pointer; }
 .signalstone-app button:focus-visible, .signalstone-app input:focus-visible, .signalstone-app textarea:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.signalstone-mark-all-read:disabled { cursor: default; opacity: 0.4; }
 .signalstone-status { color: var(--text-muted); }
 .signalstone-status.is-live { color: var(--color-green); }
 .signalstone-header-actions { display: flex; gap: 6px; }
@@ -44,8 +45,11 @@
 .signalstone-member-actions button { font-size: var(--font-ui-smaller); }
 .signalstone-messages { flex: 1; overflow: auto; padding: 8px; }
 .signalstone-load-older { display: block; margin: 4px auto 12px; }
-.signalstone-jump-to-unread { position: sticky; top: 0; z-index: 1; display: block; width: 100%; margin-bottom: 6px; padding: 6px 10px; border: 0; border-radius: var(--radius-s); background: var(--interactive-accent); color: var(--text-on-accent); font-size: var(--font-ui-small); font-weight: var(--font-semibold); text-align: center; }
-.signalstone-jump-to-unread:hover { background: var(--interactive-accent-hover); }
+.signalstone-unread-controls { position: sticky; top: 0; z-index: 1; display: flex; gap: 6px; margin-bottom: 6px; }
+.signalstone-jump-to-unread { flex: 1; padding: 6px 10px; border: 0; border-radius: var(--radius-s); background: var(--interactive-accent); color: var(--text-on-accent); font-size: var(--font-ui-small); font-weight: var(--font-semibold); text-align: center; }
+.signalstone-jump-to-unread:hover:not(:disabled) { background: var(--interactive-accent-hover); }
+.signalstone-jump-to-unread:disabled { cursor: default; opacity: 0.7; }
+.signalstone-mark-read { flex-shrink: 0; padding: 6px 10px; border-radius: var(--radius-s); font-size: var(--font-ui-small); }
 .signalstone-unread-divider { margin: 8px 0; padding: 3px 8px; border-radius: var(--radius-s); background: var(--background-modifier-hover); color: var(--interactive-accent); font-size: var(--font-ui-smaller); font-weight: var(--font-semibold); text-align: center; }
 .signalstone-unread-divider.is-anchor-only { margin: 0; height: 0; padding: 0; overflow: hidden; }
 .signalstone-message { position: relative; padding: 8px; margin: 3px 0; border-radius: var(--radius-s); overflow-wrap: anywhere; }

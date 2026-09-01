@@ -3,6 +3,7 @@ import type { SignalstoneState, SignalstoneStore } from '../services/Signalstone
 import { formatDate, realtimeLabel } from '../utils/format';
 import { presenceInfo } from '../utils/presence';
 import { openSpaceContextMenu } from './spaceContextMenu';
+import { showConfirmMenu } from './confirmMenu';
 
 /** The "Recent" screen: connectivity status, local filtering, and the combined list of direct/group spaces. */
 export function ConversationList({
@@ -30,6 +31,7 @@ export function ConversationList({
 	// the front without disturbing their relative order from the sort above —
 	// favorites stay in recent/alphabetical order among themselves too.
 	const spaces = [...ordered].sort((a, b) => Number(isFavorite(b.id)) - Number(isFavorite(a.id)));
+	const totalUnread = Object.values(state.unreadMessageIdsBySpace).reduce((sum, ids) => sum + ids.length, 0);
 
 	return (
 		<section className="signalstone-app">
@@ -42,6 +44,17 @@ export function ConversationList({
 					</small>
 				</div>
 				<div className="signalstone-header-actions">
+					{state.settings.showMarkAllReadButton && (
+						<button
+							className="signalstone-mark-all-read"
+							onClick={(event) => showConfirmMenu(event.nativeEvent, `Mark all ${totalUnread} unread message${totalUnread === 1 ? '' : 's'} as read, across every conversation?`, 'Mark all as read', () => store.markAllAsRead())}
+							disabled={totalUnread === 0}
+							aria-label="Mark all conversations as read"
+							title={totalUnread > 0 ? 'Mark all conversations as read' : 'Nothing to mark as read'}
+						>
+							✓
+						</button>
+					)}
 					<button onClick={onNewMessage} aria-label="Start a new message">
 						＋
 					</button>

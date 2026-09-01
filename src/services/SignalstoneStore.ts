@@ -196,6 +196,43 @@ export class SignalstoneStore {
 		} catch (error) { this.patch({ loading: false, error: this.message(error) }); }
 	}
 
+	/**
+	 * For the jump-to-unread button, when more unread messages arrived than
+	 * a single page holds: the earliest one is older than what selectSpace's
+	 * initial page fetched, so it isn't loaded yet. Pagination here is
+	 * cursor-based (each `nextMessagesUrl` already encodes the page size from
+	 * the original request — there's no way to ask a single follow-up call
+	 * for a specific larger page), so this repeats the same "Load older
+	 * messages" step the button already exposes, automatically, until the
+	 * target message is loaded or there's nothing older left to try. Capped
+	 * at a handful of pages so a message that's been deleted, or a backlog
+	 * far larger than normal, can't spin indefinitely.
+	 */
+	async loadUntilMessageLoaded(messageId: string): Promise<boolean> {
+		const spaceId = this.state.selectedSpaceId;
+		const MAX_PAGES = 10;
+		for (let i = 0; i < MAX_PAGES; i++) {
+			if (this.state.messages.some((message) => message.id === messageId)) return true;
+			if (this.state.selectedSpaceId !== spaceId || !this.state.nextMessagesUrl) return false;
+			await this.loadOlder();
+		}
+		return this.state.messages.some((message) => message.id === messageId);
+	}
+
+	/** Marks a single conversation fully read without needing to leave and reopen it — clears its live unread set and, if it's the one currently open, the divider/jump-button snapshot too. Local-only, see recordUnreadMessage. */
+	markSpaceAsRead(spaceId: string): void {
+		const existing = this.state.unreadMessageIdsBySpace[spaceId];
+		const unreadMessageIdsBySpace = existing?.length ? { ...this.state.unreadMessageIdsBySpace, [spaceId]: [] } : this.state.unreadMessageIdsBySpace;
+		const openedWithUnreadIds = this.state.selectedSpaceId === spaceId ? [] : this.state.openedWithUnreadIds;
+		if (unreadMessageIdsBySpace === this.state.unreadMessageIdsBySpace && openedWithUnreadIds === this.state.openedWithUnreadIds) return;
+		this.patch({ unreadMessageIdsBySpace, openedWithUnreadIds });
+	}
+
+	/** Marks every conversation read at once, from the conversation-list header. Local-only, see recordUnreadMessage. */
+	markAllAsRead(): void {
+		this.patch({ unreadMessageIdsBySpace: {}, openedWithUnreadIds: [] });
+	}
+
 	async send(text: string, file?: File): Promise<void> {
 		const spaceId = this.state.selectedSpaceId;
 		if (!spaceId || (!text.trim() && !file)) return;

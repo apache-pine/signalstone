@@ -9,7 +9,7 @@ Signalstone is an independent, lightweight Webex messaging client for an Obsidia
 - Plain text/Webex Markdown sending and one-file upload with paste/drag-and-drop
 - Safe text/link/code rendering without injecting Webex HTML
 - Threaded replies, editing/deleting own messages, and inline file/image previews (click a loaded image for a full-size view)
-- Local, session-only unread tracking at the individual message level — a count badge per conversation, a "new messages" divider and jump button inside it, and a badge on the ribbon icon, each independently toggleable
+- Local, session-only unread tracking at the individual message level — a count badge per conversation, a "new messages" divider and jump button inside it (which loads older pages automatically if needed to reach it), and a badge on the ribbon icon, each independently toggleable; mark a single conversation or everything read on demand, each behind a confirmation
 - Official Webex Browser SDK events with automatic conservative polling fallback
 - Responsive theme-native sidebar, offline states, and in-memory drafts
 
@@ -25,7 +25,7 @@ Every behavior below defaults to the plugin's original, unconfigured behavior �
 - **Appearance** — message spacing (comfortable/compact), 12-hour vs. 24-hour vs. system timestamps, and conversation list sort order (recent activity vs. alphabetical).
 - **Avatars & presence** — four independent toggles: avatar/presence, each for the conversation list and for an open direct message. Direct spaces only.
 - **Conversations** — whether deleting a message requires a confirming second click, whether attachments load automatically instead of on click, whether the message list always scrolls to a new message or only when you were already near the bottom, and whether hidden conversations (see the right-click menu) show up in the list, marked "Hidden", so they can be found and unhidden.
-- **Unread messages** — whether unread tracking runs at all (device- and session-local; nothing about it syncs or persists, and it starts fresh every restart), plus independent toggles for the conversation-list count badge, the in-conversation "N new messages" divider, the jump-to-unread button, and the ribbon icon's unread count.
+- **Unread messages** — whether unread tracking runs at all (device- and session-local; nothing about it syncs or persists, and it starts fresh every restart), plus independent toggles for the conversation-list count badge, the in-conversation "N new messages" divider, the jump-to-unread button, the ribbon icon's unread count, and the "mark all as read" header button.
 - **Advanced** — the REST-polling fallback's cadence (only relevant while the connectivity indicator shows "Polling" rather than "Live"), how many messages load per page, and debug logging.
 
 ## Install and connect
