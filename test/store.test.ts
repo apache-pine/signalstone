@@ -532,4 +532,38 @@ describe('SignalstoneStore', () => {
 
 		expect(loaded).toBe(false);
 	});
+
+	it('does not double-notify or re-mark a message unread when the live event and the background space-list poll both detect it', async () => {
+		// Regression test: ResilientRealtimeProvider keeps forwarding
+		// 'refresh-space-list' events even while fully live (to keep the
+		// conversation list in sync -- see its own doc comment), so
+		// notifyBackgroundActivity's lastActivity diff can independently
+		// rediscover a message the live 'message-created' path already
+		// surfaced moments earlier, since it has no idea that already
+		// happened. This used to both double-fire the Notice and re-mark an
+		// already-read message unread.
+		const listSpaces = vi
+			.fn()
+			.mockResolvedValueOnce({ items: [space('Room A')], nextUrl: undefined }) // baseline
+			.mockResolvedValueOnce({ items: [{ ...space('Room A'), lastActivity: '2026-01-02T00:00:00Z' }], nextUrl: undefined }); // the poll sees the same bump
+		const { store, messages, realtime } = createStore(listSpaces);
+		const notified: WebexMessage[] = [];
+		store.notify = (item) => notified.push(item);
+		await store.loadSpaces(); // establishes the baseline
+
+		messages.get.mockResolvedValueOnce(message({ id: 'dup', spaceId: 'room', personId: 'them' }));
+		realtime.emit({ type: 'message-created', spaceId: 'room', messageId: 'dup' });
+		await flushMicrotasks();
+		expect(notified.map((item) => item.id)).toEqual(['dup']);
+		expect(store.getSnapshot().unreadMessageIdsBySpace.room).toEqual(['dup']);
+
+		store.markSpaceAsRead('room'); // read and cleared before the poll catches up
+		expect(store.getSnapshot().unreadMessageIdsBySpace.room ?? []).toEqual([]);
+
+		messages.list.mockResolvedValueOnce({ items: [message({ id: 'dup', spaceId: 'room', personId: 'them' })], nextUrl: undefined });
+		await store.loadSpaces(); // the background poll independently rediscovers the same message
+
+		expect(notified.map((item) => item.id)).toEqual(['dup']); // still only notified once
+		expect(store.getSnapshot().unreadMessageIdsBySpace.room ?? []).toEqual([]); // not re-marked unread
+	});
 });
