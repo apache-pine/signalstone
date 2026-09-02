@@ -29,7 +29,7 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 	const threadParent = state.threadParentId ? state.messages.find((message) => message.id === state.threadParentId) : undefined;
 	const displayedMessages = state.threadParentId ? state.threadMessages : state.messages;
 	const space = state.spaces.find((item) => item.id === state.selectedSpaceId);
-	const { alwaysScrollToNewest, confirmBeforeDelete, autoLoadAttachments, timeFormat, messageDensity } = state.settings;
+	const { alwaysScrollToNewest, confirmBeforeDelete, autoLoadAttachments, timeFormat, messageDensity, allowSelectingMessageText, allowSelectingSenderNames } = state.settings;
 
 	// Unread tracking is top-level-only (see SignalstoneStore.maybeNotify), so
 	// there's nothing to mark inside a thread. openedWithUnreadIds is a fixed
@@ -132,7 +132,7 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 			)}
 			{threadParent && (
 				<div className="signalstone-thread-parent">
-					<MessageItem message={threadParent} own={threadParent.personId === selfId} store={store} space={space} confirmBeforeDelete={confirmBeforeDelete} autoLoadAttachments={autoLoadAttachments} timeFormat={timeFormat} readBy={readByMessageId.get(threadParent.id)} compact />
+					<MessageItem message={threadParent} own={threadParent.personId === selfId} store={store} space={space} confirmBeforeDelete={confirmBeforeDelete} autoLoadAttachments={autoLoadAttachments} timeFormat={timeFormat} readBy={readByMessageId.get(threadParent.id)} allowSelectingMessageText={allowSelectingMessageText} allowSelectingSenderNames={allowSelectingSenderNames} compact />
 				</div>
 			)}
 			{!state.threadParentId && state.nextMessagesUrl && (
@@ -168,11 +168,13 @@ export function MessageList({ state, store, selfId }: { state: SignalstoneState;
 						replyCount={state.threadReplyCounts[message.id] ?? 0}
 						onReply={state.threadParentId ? undefined : () => void store.openThread(message.id)}
 						onDelete={() => void store.deleteMessage(message.id)}
+						allowSelectingMessageText={allowSelectingMessageText}
+						allowSelectingSenderNames={allowSelectingSenderNames}
 					/>
 					{!state.threadParentId &&
 						(state.threadRepliesByParent[message.id] ?? []).map((reply) => (
 							<div className="signalstone-inline-reply" key={reply.id}>
-								<MessageItem message={reply} own={reply.personId === selfId} store={store} space={space} confirmBeforeDelete={confirmBeforeDelete} autoLoadAttachments={autoLoadAttachments} timeFormat={timeFormat} readBy={readByMessageId.get(reply.id)} onDelete={() => void store.deleteMessage(reply.id)} compact />
+								<MessageItem message={reply} own={reply.personId === selfId} store={store} space={space} confirmBeforeDelete={confirmBeforeDelete} autoLoadAttachments={autoLoadAttachments} timeFormat={timeFormat} readBy={readByMessageId.get(reply.id)} onDelete={() => void store.deleteMessage(reply.id)} allowSelectingMessageText={allowSelectingMessageText} allowSelectingSenderNames={allowSelectingSenderNames} compact />
 							</div>
 						))}
 				</Fragment>

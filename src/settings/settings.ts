@@ -78,6 +78,28 @@ export interface SignalstoneSettings {
 	showUnreadBadgeOnRibbonIcon: boolean;
 	/** The "mark all conversations as read" button in the conversation-list header. Its own toggle (rather than folding it into trackUnreadMessages) since it's specifically about header clutter, not tracking itself. */
 	showMarkAllReadButton: boolean;
+	/**
+	 * Whether a message's own text is selectable (click-and-drag to
+	 * highlight, for copying). Forced off, this is a real "select nothing"
+	 * lock, not just leaving Obsidian's own default in place — see
+	 * docs/WEBEX_CAPABILITIES.md, "Selecting and copying message text".
+	 * Selection is free to span multiple messages at once whenever this is
+	 * on (ordinary browser text-selection behavior across sibling elements
+	 * — nothing extra needed to allow it); right-click "Copy message" (the
+	 * whole message) works independently of this setting either way, since
+	 * it doesn't rely on a text selection existing at all.
+	 */
+	allowSelectingMessageText: boolean;
+	/**
+	 * Whether the sender name/timestamp line above each message is included
+	 * when dragging a selection through it. Turning this off lets a
+	 * selection that starts in one message's body and ends in a later one's
+	 * skip every name/timestamp line in between, for copying several
+	 * consecutive messages' text without their headers mixed in.
+	 * Independent of allowSelectingMessageText's own on/off state, though
+	 * it has no visible effect while that one is off.
+	 */
+	allowSelectingSenderNames: boolean;
 }
 
 export const DEFAULT_SETTINGS: SignalstoneSettings = {
@@ -108,6 +130,8 @@ export const DEFAULT_SETTINGS: SignalstoneSettings = {
 	showUnreadJumpButton: true,
 	showUnreadBadgeOnRibbonIcon: true,
 	showMarkAllReadButton: true,
+	allowSelectingMessageText: true,
+	allowSelectingSenderNames: true,
 };
 
 /**

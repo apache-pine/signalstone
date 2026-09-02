@@ -1,14 +1,19 @@
-import { useState } from 'react';
+import { Menu, Notice } from 'obsidian';
+import { useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import type { WebexMessage } from '../models/Message';
 import type { ReadReceipt } from '../models/ReadReceipt';
 import type { Space } from '../models/Space';
 import type { SignalstoneStore } from '../services/SignalstoneStore';
 import type { TimeFormat } from '../settings/settings';
-import { formatDate, resolveSenderName } from '../utils/format';
+import { errorMessage, formatDate, resolveSenderName } from '../utils/format';
 import { renderWebexMarkdown } from '../utils/webexMarkdown';
 import { extractCardFallback } from '../utils/adaptiveCard';
 import { AttachmentPreview } from './AttachmentPreview';
 import { AdaptiveCardFallback } from './AdaptiveCardFallback';
+
+/** Neither prefixed nor unprefixed `user-select` is in React's built-in CSSProperties typing, so this widens it for exactly those two. */
+type SelectableStyle = CSSProperties & { userSelect?: 'text' | 'none'; WebkitUserSelect?: 'text' | 'none' };
+const selectable = (allowed: boolean): SelectableStyle => ({ userSelect: allowed ? 'text' : 'none', WebkitUserSelect: allowed ? 'text' : 'none' });
 
 export function MessageItem({
 	message,
@@ -23,6 +28,8 @@ export function MessageItem({
 	autoLoadAttachments = false,
 	timeFormat = 'system',
 	readBy,
+	allowSelectingMessageText = true,
+	allowSelectingSenderNames = true,
 }: {
 	message: WebexMessage;
 	own: boolean;
@@ -40,6 +47,10 @@ export function MessageItem({
 	timeFormat?: TimeFormat;
 	/** Other members whose live read receipt currently points at this exact message. See docs/WEBEX_CAPABILITIES.md, "Read/unread state" — receive-only, live-only. */
 	readBy?: ReadReceipt[];
+	/** Whether this message's own text can be click-and-drag selected. See docs/WEBEX_CAPABILITIES.md, "Selecting and copying message text". */
+	allowSelectingMessageText?: boolean;
+	/** Whether the sender name/timestamp line is included when a selection is dragged through it. */
+	allowSelectingSenderNames?: boolean;
 }) {
 	const [editing, setEditing] = useState(false);
 	const [editText, setEditText] = useState(message.markdown || message.text || '');
@@ -56,9 +67,38 @@ export function MessageItem({
 		}
 	};
 
+	const text = message.markdown || message.text || '';
+	/**
+	 * Right-click "Copy message" for the whole message at once, independent
+	 * of allowSelectingMessageText -- it writes to the clipboard directly
+	 * rather than relying on a text selection existing. Only takes over the
+	 * context menu when there's something to copy and nothing is already
+	 * selected: an active selection (the "capture just portions" case) falls
+	 * through to the native context menu instead, so its own standard Copy
+	 * still targets exactly what was highlighted rather than being replaced
+	 * by "the whole message" unexpectedly.
+	 */
+	const onContextMenu = (event: ReactMouseEvent) => {
+		if (!text || window.getSelection()?.toString()) return;
+		event.preventDefault();
+		const menu = new Menu();
+		menu.addItem((item) =>
+			item
+				.setTitle('Copy message')
+				.setIcon('copy')
+				.onClick(() => {
+					void navigator.clipboard
+						.writeText(text)
+						.then(() => new Notice('Message copied.'))
+						.catch((reason: unknown) => new Notice(errorMessage(reason, 'Unable to copy message.')));
+				}),
+		);
+		menu.showAtMouseEvent(event.nativeEvent);
+	};
+
 	return (
 		<article className={`signalstone-message${own ? ' is-own' : ''}${compact ? ' is-compact' : ''}`}>
-			<div>
+			<div style={selectable(allowSelectingSenderNames)}>
 				<strong>{own ? 'You' : resolveSenderName(message, space)}</strong>
 				<time>{formatDate(message.created, timeFormat)}</time>
 			</div>
@@ -73,7 +113,9 @@ export function MessageItem({
 					</div>
 				</div>
 			) : (
-				<div className="signalstone-message-text">{renderWebexMarkdown(message.markdown || message.text || '')}</div>
+				<div className="signalstone-message-text" style={selectable(allowSelectingMessageText)} onContextMenu={onContextMenu}>
+					{renderWebexMarkdown(text)}
+				</div>
 			)}
 			{message.files?.map((url) => <AttachmentPreview url={url} store={store} autoLoad={autoLoadAttachments} key={url} />)}
 			{message.attachments?.map((attachment, index) => {

@@ -86,6 +86,14 @@ export class SignalstoneStore {
 	private unsubscribeRealtimeStatus?: () => void;
 	/** Previous lastActivity per space, used to detect background activity for notifications. Undefined until after the first load. */
 	private lastKnownActivity?: Map<string, string>;
+	/**
+	 * Message ids already passed to maybeNotify, so it stays idempotent no
+	 * matter how many independent paths detect the same message -- see
+	 * maybeNotify's own comment for why that happens routinely, not just in
+	 * rare edge cases. Insertion-ordered so overflow trims the oldest first.
+	 */
+	private readonly notifiedMessageIds = new Set<string>();
+	private static readonly MAX_NOTIFIED_MESSAGE_IDS = 500;
 	/** Resolved once per direct space (never changes after) and reused across every refreshDirectoryInfo() cycle, so only unresolved spaces cost an extra membership lookup. */
 	private readonly otherPersonIdBySpaceId = new Map<string, string>();
 
@@ -484,6 +492,22 @@ export class SignalstoneStore {
 	 * tracking are independently configurable (a Notice popup and an in-app
 	 * badge are different concerns), so each is gated by its own setting
 	 * here rather than one implying the other.
+	 *
+	 * Two independent callers can reach this for the very same message: a
+	 * live `message-created` realtime event (handleRealtime), and the
+	 * always-on background conversation-list poll (notifyBackgroundActivity,
+	 * driven by ResilientRealtimeProvider's `refresh-space-list` events,
+	 * which keep arriving even while fully `live` -- see its own doc
+	 * comment). The live path typically fires first; the next poll cycle
+	 * then sees the same space's `lastActivity` bump and, having no idea the
+	 * live path already handled it, reports it as "new" again. Confirmed
+	 * live: this doubled the Notice, and, worse, could re-mark a message
+	 * unread even after it had already been read and cleared, since
+	 * recordUnreadMessage only dedupes against a message still *currently*
+	 * unread, not one already resolved. notifiedMessageIds makes this
+	 * method itself idempotent per message id, regardless of which path (or
+	 * how many) detects it, closing both symptoms at their shared root
+	 * rather than patching each call site separately.
 	 */
 	private maybeNotify(message: WebexMessage): void {
 		if (message.parentId) return;
@@ -491,9 +515,23 @@ export class SignalstoneStore {
 		if (!selfId || message.personId === selfId) return;
 		if (message.spaceId === this.state.selectedSpaceId) return;
 		if (this.state.hiddenSpaceIds[message.spaceId]) return;
+		if (this.notifiedMessageIds.has(message.id)) return;
+		this.rememberNotifiedMessage(message.id);
 		if (this.state.settings.trackUnreadMessages) this.recordUnreadMessage(message.spaceId, message.id);
 		debugLog('store', 'Notifying for background message', { messageId: message.id, spaceId: message.spaceId, hasNotifyHandler: Boolean(this.notify) });
 		this.notify?.(message);
+	}
+
+	private rememberNotifiedMessage(messageId: string): void {
+		this.notifiedMessageIds.add(messageId);
+		const overflow = this.notifiedMessageIds.size - SignalstoneStore.MAX_NOTIFIED_MESSAGE_IDS;
+		if (overflow <= 0) return;
+		let removed = 0;
+		for (const id of this.notifiedMessageIds) {
+			if (removed >= overflow) break;
+			this.notifiedMessageIds.delete(id);
+			removed++;
+		}
 	}
 
 	/** Local-only, session-only — see docs/WEBEX_CAPABILITIES.md, "Unread messages". */

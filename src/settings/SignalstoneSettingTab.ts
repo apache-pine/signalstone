@@ -183,6 +183,16 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 						desc: 'A direct message you hide (via the right-click menu, or another Webex client) is excluded from the list by default. Turn this on to see hidden conversations too, marked "Hidden", so they can be unhidden from the same right-click menu.',
 						control: { type: 'toggle', key: 'showHiddenConversations' },
 					},
+					{
+						name: 'Allow selecting message text',
+						desc: 'Click-and-drag to highlight a message\'s text, for copying. A selection is free to span several messages in a row, not just one. Right-click a message to copy the whole thing at once regardless of this setting.',
+						control: { type: 'toggle', key: 'allowSelectingMessageText' },
+					},
+					{
+						name: 'Include the sender name when selecting',
+						desc: 'Turn off to have a multi-message selection skip each sender name/timestamp line in between, so dragging across several messages from the same person copies just their text.',
+						control: { type: 'toggle', key: 'allowSelectingSenderNames' },
+					},
 				],
 			},
 			{
@@ -288,6 +298,8 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			case 'showAvatarsInConversations': return settings.showAvatarsInConversations;
 			case 'showPresenceInConversations': return settings.showPresenceInConversations;
 			case 'showHiddenConversations': return settings.showHiddenConversations;
+			case 'allowSelectingMessageText': return settings.allowSelectingMessageText;
+			case 'allowSelectingSenderNames': return settings.allowSelectingSenderNames;
 			case 'trackUnreadMessages': return settings.trackUnreadMessages;
 			case 'showUnreadBadgeInRecents': return settings.showUnreadBadgeInRecents;
 			case 'showUnreadMarkerInConversation': return settings.showUnreadMarkerInConversation;
@@ -320,6 +332,8 @@ export class SignalstoneSettingTab extends PluginSettingTab {
 			case 'showAvatarsInConversations': settings.showAvatarsInConversations = value as boolean; break;
 			case 'showPresenceInConversations': settings.showPresenceInConversations = value as boolean; break;
 			case 'showHiddenConversations': settings.showHiddenConversations = value as boolean; break;
+			case 'allowSelectingMessageText': settings.allowSelectingMessageText = value as boolean; break;
+			case 'allowSelectingSenderNames': settings.allowSelectingSenderNames = value as boolean; break;
 			case 'trackUnreadMessages': settings.trackUnreadMessages = value as boolean; break;
 			case 'showUnreadBadgeInRecents': settings.showUnreadBadgeInRecents = value as boolean; break;
 			case 'showUnreadMarkerInConversation': settings.showUnreadMarkerInConversation = value as boolean; break;

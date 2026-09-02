@@ -406,6 +406,81 @@ the original Notice if `app.setting` isn't present at all (e.g. a future
 Obsidian release removes or renames it) so the button degrades gracefully
 rather than doing nothing.
 
+## Selecting and copying message text
+
+Reported live: click-and-drag text selection didn't work anywhere in the
+message transcript at all, in either direction of the conversation — not
+one message, not a portion of one. There's no CSS or JS anywhere in this
+codebase that disables selection (checked directly — no `user-select` rule
+existed before this fix, in either `styles.css` or any inline style), so the
+most likely explanation is Obsidian's own base styling: plugin view content
+sits inside the same workspace chrome as tab headers, panes, and other UI
+that's deliberately non-selectable by default, and unlike a first-party
+core view, a plugin's own content has to explicitly opt back in with its
+own `user-select: text` rather than inheriting selectability. This
+diagnosis isn't confirmed against Obsidian's own (closed) source the way
+the SDK findings above are traced against installed, readable source — it's
+the standard, known fix for this category of "can't select text in my
+plugin" report, applied and awaiting live confirmation.
+
+**Fix:** `MessageItem` now sets `user-select: text` (and `-webkit-user-select`
+for older Chromium/Electron versions) as an inline style — not a stylesheet
+rule — directly on the message body and on the sender name/timestamp line.
+Inline styles were the deliberate choice here, not a CSS class: this project
+has twice already hit cases where Obsidian's or a theme's own styling beat a
+single class selector in the cascade (see "Enlarged image preview" above),
+and `!important` on a `user-select` reset felt like the wrong tool for
+something that needs to flip between two states via settings, not just
+force one value permanently. An inline style always wins regardless of
+what else is on the page, sidestepping that whole class of bug entirely.
+
+Both directions are real toggles, not just "off reverts to whatever
+Obsidian's default happens to be": `allowSelectingMessageText: false`
+explicitly forces `user-select: none`, a genuine lock, not an absence of
+opinion.
+
+**Selecting multiple messages at once — turns out to need nothing extra.**
+Webex's own client only lets you highlight one message at a time; the
+request here was to allow selecting several in a row instead, "if
+possible." It's possible for free: browser text selection naturally spans
+sibling DOM elements when you drag across them, and each message is an
+ordinary sibling `<article>` in a plain scrolling list — nothing about this
+codebase's markup groups or isolates one message's selection from the next.
+Once `user-select: text` is applied at all, dragging from one message's
+body into another's already produces one continuous selection covering
+both, with no separate setting or extra code needed to allow it. Whatever
+mechanism keeps Webex's own client to one message at a time (almost
+certainly deliberate, likely a `selectionchange` listener that clamps the
+range, or per-bubble `user-select` isolation) simply isn't replicated here.
+
+**Excluding the sender name from a multi-message selection.**
+`allowSelectingSenderNames: false` sets `user-select: none` specifically on
+the name/timestamp line above each message's body. Native browser selection
+skips a `user-select: none` element's text entirely when a drag passes
+through it — the resulting selection jumps from just before it to just
+after, as if it weren't there — so with this off, dragging from one
+message's body down through several more ends up with only their body text,
+none of the header lines in between. This is exactly the "copy 4
+instructions from the same person without their name repeated four times"
+case that motivated the setting, and it's genuine browser selection
+behavior, not something this project reimplements.
+
+**Right-click "Copy message" — the whole message, independent of
+selection.** A context-menu item (Obsidian's own `Menu`, same as the
+space list's right-click menu and the mark-as-read confirmations) copies a
+message's full text to the clipboard directly via
+`navigator.clipboard.writeText`, without needing anything selected first —
+this is what makes it work even with `allowSelectingMessageText` off
+entirely. It only takes over the context menu when there's text to copy and
+nothing is currently selected; right-clicking an active selection instead
+falls through to the native context menu, so the "capture just portions"
+case still gets the browser's own standard Copy for exactly what was
+highlighted, rather than being overridden to "the whole message" against
+the point of having made a selection at all. Available on both sent and
+received messages, and needs no setting of its own — a right-click action,
+not passive UI, the same reasoning already applied to the image unload
+button and the Save link.
+
 ## Adaptive cards: read-only text extraction, deliberately not interactive
 
 Unlike everything marked "private-only" elsewhere in this document, Adaptive
@@ -671,7 +746,7 @@ integration surface, and reverse-engineering it would mean guessing at an
 undocumented, private protocol rather than using a supported API. Not
 implemented, and not planned unless Cisco documents a public endpoint.
 
-## Realtime: five issues found and fixed; confirmed reaching Live
+## Realtime: six issues found and fixed; confirmed reaching Live
 
 Getting the Webex Browser SDK to connect from inside Obsidian was an
 iterative process of live-testing, each fix revealing the next real blocker.
@@ -887,11 +962,43 @@ the reorder and the "space not loaded yet" no-op case) and a rewritten
 fallback is never stopped by a live transition and that only `poll-tick` is
 suppressed while live.
 
-Still not fully confirmed live: whether the notification delay the tester
-also reported was ever real, or was actually the conversation-list staleness
-being perceived as "no notification." Worth re-testing specifically once this
-fix is live, since notifications may turn out to have been working correctly
-all along.
+Update: the notification delay the tester also reported turned out to be a
+different bug entirely, not conversation-list staleness misread as "no
+notification" as guessed above — see issue 6, which this same fix's safety
+net directly caused.
+
+### 6. The always-on space-list safety net double-fired notifications and unread marks (fixed)
+
+Issue 5's fix deliberately kept `notifyBackgroundActivity`'s `lastActivity`
+diffing running continuously alongside the direct `message-created` →
+`maybeNotify` path, as a safety net in case the direct path "turns out to
+have some as-yet-unconfirmed gap of its own" — and left an explicit open
+question: whether a live tester's reported notification delay was ever real,
+or was the list-staleness bug being misread as "no notification". Live
+testing has since answered that, differently than expected: notifications
+weren't delayed, they were doubled, and the mechanism is exactly the
+overlap issue 5 knowingly introduced. A live `message-created` event
+notifies for a background message and marks it unread; the next 45-second
+`refresh-space-list` poll then sees the same space's `lastActivity` bump —
+having no idea the live path already handled that exact message — and
+reports it as new all over again. Worse than a duplicate Notice: since
+`recordUnreadMessage` only dedupes against a message still *currently*
+unread, a message the user had already read and cleared could be silently
+re-marked unread by the delayed second detection.
+
+**Fix:** `maybeNotify` now tracks `notifiedMessageIds`, a bounded
+(500-entry, oldest-trimmed) set of message ids it has already acted on, and
+returns immediately for one already in it — before either notifying or
+marking unread — making the method idempotent per message regardless of
+which path, or how many, detect it. This fixes both symptoms at their
+shared root (both flow through the same `maybeNotify` call) rather than
+patching `notifyBackgroundActivity` and the live path separately. The
+safety net from issue 5 stays exactly as it was; it just can no longer
+duplicate work the live path already did. Covered by a regression test in
+`test/store.test.ts` reproducing the full sequence: live event notifies and
+marks unread, the message is read and cleared, then a background poll
+rediscovers the same message and is confirmed to neither re-notify nor
+re-mark it unread.
 
 ### What this proves, and what's still open
 
